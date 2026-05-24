@@ -1,16 +1,18 @@
+import { CalendarDays } from "lucide-react";
+
 export default function Topbar({ title = "Dashboard", subtitle = "Welcome back." }) {
   return (
-    <header className="mb-8 flex flex-col justify-between gap-4 border-b border-cyan-400/10 pb-6 md:flex-row md:items-center">
+    <header className="mb-7 flex flex-col justify-between gap-4 md:flex-row md:items-start">
       <div>
-        <p className="text-sm uppercase tracking-[0.35em] text-cyan-300/70">
-          Agent Panel
-        </p>
-        <h2 className="mt-2 text-3xl font-semibold text-white">{title}</h2>
-        <p className="mt-2 text-sm text-slate-400">{subtitle}</p>
+        <h2 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">
+          {title}
+        </h2>
+        <p className="mt-2 text-base text-slate-400">{subtitle}</p>
       </div>
 
-      <div className="rounded-2xl border border-cyan-400/15 bg-cyan-400/[0.04] px-5 py-3 text-sm text-cyan-100">
-        Muhammad Israr · Active
+      <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.035] px-5 py-3 text-sm text-slate-300 shadow-[0_0_35px_rgba(34,211,238,0.04)] backdrop-blur-xl">
+        <CalendarDays size={18} className="text-cyan-200" />
+        May 24, 2025
       </div>
     </header>
   );
