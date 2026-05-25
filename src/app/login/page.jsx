@@ -61,14 +61,14 @@ export default function LoginPage() {
 
     localStorage.setItem("crmRole", role);
     localStorage.setItem("crmUserId", cleanUserId);
-    localStorage.removeItem("crmCampaign");
 
     if (role === "admin") {
       router.push("/admin");
       return;
     }
 
-    router.push("/select-campaign");
+    localStorage.setItem("crmCampaign", "Commercial Cleaning");
+    router.push("/dashboard");
   }
 
   return (
@@ -184,8 +184,8 @@ export default function LoginPage() {
           </button>
 
           <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-3 text-center text-[11px] leading-5 text-slate-500">
-            Agent login marks check-in. Logout marks checkout. Same-day re-login
-            is blocked after checkout.
+            Agent login goes directly to dashboard. Login marks check-in, logout
+            marks checkout, and same-day re-login is blocked after checkout.
           </div>
 
           <div className="mt-5 text-center text-[11px] text-slate-500">
