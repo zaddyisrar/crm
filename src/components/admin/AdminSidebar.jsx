@@ -9,7 +9,6 @@ import {
 
 import {
   LayoutDashboard,
-  Users,
   ClipboardCheck,
   LogOut,
 } from "lucide-react";
@@ -19,12 +18,6 @@ const navItems = [
     name: "Dashboard",
     href: "/admin",
     icon: LayoutDashboard,
-  },
-
-  {
-    name: "Users",
-    href: "/admin/users",
-    icon: Users,
   },
 
   {
@@ -42,6 +35,7 @@ export default function AdminSidebar() {
     if (typeof window !== "undefined") {
       localStorage.removeItem("crmRole");
       localStorage.removeItem("crmUserId");
+      localStorage.removeItem("crmUserName");
     }
 
     router.replace("/login");
@@ -49,12 +43,12 @@ export default function AdminSidebar() {
 
   return (
     <aside className="fixed left-0 top-0 z-30 hidden h-screen w-72 border-r border-cyan-400/10 bg-[#03060b]/95 px-4 py-4 backdrop-blur-xl lg:flex lg:flex-col">
-      
+
       <div className="mb-5 rounded-[2rem] border border-cyan-300/10 bg-white/[0.03] p-5">
         <div className="relative h-20 w-full">
           <Image
             src="/crm-logo.png"
-            alt="CRM"
+            alt="CRM by LeadsRift"
             fill
             priority
             className="object-contain"
