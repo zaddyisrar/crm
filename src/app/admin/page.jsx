@@ -1,301 +1,206 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Users,
-  Target,
+  Building2,
+  BriefcaseBusiness,
   Clock3,
-  CalendarCheck,
-  PhoneCall,
   Activity,
-  UserCheck,
-  AlertCircle,
-  ArrowRight,
-  ShieldCheck,
+  TrendingUp,
 } from "lucide-react";
 
 import AdminShell from "@/components/admin/AdminShell";
 
-const stats = [
+function formatName(value) {
+  if (!value) return "Admin";
+
+  return value
+    .replace(/^LR-/i, "")
+    .replace(/[-_]/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (l) => l.toUpperCase());
+}
+
+const operations = [
   {
-    label: "Active Agents",
-    value: "12",
-    note: "Currently online",
-    icon: Users,
-    tone: "text-cyan-300",
+    agent: "Hamza",
+    action: "Working on Nova Building Maintenance",
+    time: "2 min ago",
   },
   {
-    label: "Campaigns",
-    value: "5",
-    note: "3 running today",
-    icon: Target,
-    tone: "text-purple-300",
+    agent: "Ammar",
+    action: "Added new lead",
+    time: "6 min ago",
   },
   {
-    label: "Attendance",
-    value: "91%",
-    note: "Today’s presence",
-    icon: Clock3,
-    tone: "text-green-300",
+    agent: "Sameen",
+    action: "Checked in",
+    time: "10 min ago",
   },
   {
-    label: "Meetings",
-    value: "18",
-    note: "Booked this week",
-    icon: CalendarCheck,
-    tone: "text-yellow-300",
+    agent: "Asim",
+    action: "Selected Seagull Cleaning",
+    time: "15 min ago",
   },
 ];
 
-const liveAgents = [
-  {
-    name: "Hamza",
-    id: "LR-HAMZA",
-    campaign: "Commercial Cleaning",
-    status: "Calling",
-    time: "02:14:32",
-    color: "text-green-300",
-    dot: "bg-green-300",
-  },
-  {
-    name: "Ammar",
-    id: "LR-AMMAR",
-    campaign: "Roofing",
-    status: "Online",
-    time: "01:40:10",
-    color: "text-cyan-300",
-    dot: "bg-cyan-300",
-  },
-  {
-    name: "Sameen",
-    id: "LR-SAMEEN",
-    campaign: "Solar",
-    status: "Follow-up",
-    time: "00:52:44",
-    color: "text-yellow-300",
-    dot: "bg-yellow-300",
-  },
-];
-
-const campaignPulse = [
-  {
-    campaign: "Commercial Cleaning",
-    leads: 120,
-    assigned: 42,
-    completed: "68%",
-  },
-  {
-    campaign: "Roofing",
-    leads: 84,
-    assigned: 31,
-    completed: "44%",
-  },
-  {
-    campaign: "Solar",
-    leads: 64,
-    assigned: 22,
-    completed: "38%",
-  },
-];
-
-const alerts = [
-  "2 agents have not checked in yet",
-  "Roofing campaign needs more lead assignment",
-  "3 follow-ups pending from yesterday",
+const summary = [
+  { title: "Leads Added", value: "34" },
+  { title: "Clients Contacted", value: "12" },
+  { title: "Active Agents", value: "9" },
+  { title: "Meetings Booked", value: "3" },
 ];
 
 export default function AdminPage() {
+  const [adminName, setAdminName] = useState("Admin");
+
+  useEffect(() => {
+    const user = localStorage.getItem("crmUserId");
+
+    if (user) {
+      setAdminName(formatName(user));
+    }
+  }, []);
+
+  const stats = [
+    {
+      title: "Active Agents",
+      value: "12",
+      note: "9 online now",
+      icon: Users,
+      color: "text-cyan-300",
+    },
+    {
+      title: "Available Clients",
+      value: "16",
+      note: "Total clients",
+      icon: Building2,
+      color: "text-green-300",
+    },
+    {
+      title: "Working Clients",
+      value: "8",
+      note: "Assigned now",
+      icon: BriefcaseBusiness,
+      color: "text-yellow-300",
+    },
+    {
+      title: "Attendance",
+      value: "91%",
+      note: "Present today",
+      icon: Clock3,
+      color: "text-purple-300",
+    },
+  ];
+
   return (
-    <AdminShell
-      title="Admin Dashboard"
-      subtitle="Control center for campaigns, agents, attendance, and CRM operations."
-    >
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
+    <AdminShell>
+      <div className="mb-5 rounded-[1.6rem] border border-cyan-300/10 bg-white/[0.03] px-8 py-6">
+        <p className="text-[11px] uppercase tracking-[0.4em] text-cyan-300">
+          ADMIN CONTROL CENTER
+        </p>
+
+        <h1 className="mt-3 text-4xl font-black text-white">
+          Welcome {adminName}
+        </h1>
+
+        <p className="mt-2 text-sm text-slate-500">
+          Manage team activity and CRM operations.
+        </p>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-4">
+        {stats.map((card) => {
+          const Icon = card.icon;
 
           return (
             <div
-              key={stat.label}
-              className="rounded-2xl border border-white/10 bg-[#071018]/80 p-5 backdrop-blur-xl"
+              key={card.title}
+              className="rounded-[1.6rem] border border-cyan-300/10 bg-white/[0.03] p-5"
             >
               <div className="mb-4 flex items-center justify-between">
-                <div
-                  className={`flex h-11 w-11 items-center justify-center rounded-xl bg-white/5 ${stat.tone}`}
-                >
-                  <Icon size={20} />
+                <div className={`rounded-xl bg-white/[0.04] p-3 ${card.color}`}>
+                  <Icon size={17} />
                 </div>
 
-                <span className="text-xs text-slate-500">{stat.note}</span>
+                <p className="text-xs text-slate-500">
+                  {card.note}
+                </p>
               </div>
 
-              <p className="text-3xl font-black text-white">{stat.value}</p>
-              <p className="mt-1 text-sm text-slate-400">{stat.label}</p>
+              <h2 className="text-2xl font-black text-white">
+                {card.value}
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-400">
+                {card.title}
+              </p>
             </div>
           );
         })}
       </div>
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-        <section className="rounded-2xl border border-white/10 bg-[#071018]/80 p-5 backdrop-blur-xl">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.25em] text-cyan-300/70">
-                Live Operations
-              </p>
-              <h3 className="mt-1 text-lg font-semibold text-white">
-                Agent Activity
-              </h3>
-            </div>
-
-            <span className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-300">
-              Live
-            </span>
+      <div className="mt-5 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+        <div className="rounded-[1.6rem] border border-cyan-300/10 bg-white/[0.03] p-5">
+          <div className="mb-5 flex items-center gap-3">
+            <Activity className="text-cyan-300" size={18} />
+            <h2 className="text-lg font-bold text-white">
+              Live Operations
+            </h2>
           </div>
 
           <div className="space-y-3">
-            {liveAgents.map((agent) => (
+            {operations.map((x) => (
               <div
-                key={agent.id}
-                className="grid gap-4 rounded-2xl border border-white/10 bg-black/20 p-4 md:grid-cols-[1fr_1fr_0.7fr_0.5fr]"
+                key={x.agent}
+                className="flex items-center justify-between rounded-xl border border-white/5 bg-black/20 px-4 py-4"
               >
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className={`h-2.5 w-2.5 rounded-full ${agent.dot}`} />
-                    <p className="font-medium text-white">{agent.name}</p>
-                  </div>
-                  <p className="mt-1 text-xs text-slate-500">{agent.id}</p>
-                </div>
+                  <p className="font-semibold text-white">
+                    {x.agent}
+                  </p>
 
-                <div>
-                  <p className="text-xs text-slate-500">Campaign</p>
-                  <p className="mt-1 text-sm text-slate-300">{agent.campaign}</p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-slate-500">Status</p>
-                  <p className={`mt-1 text-sm font-medium ${agent.color}`}>
-                    {agent.status}
+                  <p className="mt-1 text-sm text-slate-500">
+                    {x.action}
                   </p>
                 </div>
 
-                <div>
-                  <p className="text-xs text-slate-500">Time</p>
-                  <p className="mt-1 text-sm text-cyan-300">{agent.time}</p>
-                </div>
+                <span className="text-xs text-slate-500">
+                  {x.time}
+                </span>
               </div>
             ))}
           </div>
-        </section>
+        </div>
 
-        <section className="rounded-2xl border border-white/10 bg-[#071018]/80 p-5 backdrop-blur-xl">
-          <div className="mb-5 flex items-center gap-2">
-            <ShieldCheck size={18} className="text-cyan-300" />
-            <h3 className="text-lg font-semibold text-white">Admin Actions</h3>
+        <div className="rounded-[1.6rem] border border-cyan-300/10 bg-white/[0.03] p-5">
+          <div className="mb-5 flex items-center gap-3">
+            <TrendingUp className="text-cyan-300" size={18} />
+
+            <h2 className="text-lg font-bold text-white">
+              Today Summary
+            </h2>
           </div>
 
-          <div className="grid gap-3">
-            <AdminAction href="/admin/users" label="Create Agent / Manager" icon={Users} />
-            <AdminAction href="/admin/campaigns" label="Add Campaign" icon={Target} />
-            <AdminAction href="/admin/attendance" label="View Attendance" icon={UserCheck} />
-            <AdminAction href="/admin/analytics" label="Open Analytics" icon={Activity} />
+          <div className="space-y-3">
+            {summary.map((x) => (
+              <div
+                key={x.title}
+                className="flex items-center justify-between rounded-xl border border-white/5 bg-black/20 px-4 py-4"
+              >
+                <span className="text-slate-400">
+                  {x.title}
+                </span>
+
+                <span className="text-xl font-black text-white">
+                  {x.value}
+                </span>
+              </div>
+            ))}
           </div>
-
-          <div className="mt-5 rounded-2xl border border-yellow-300/15 bg-yellow-300/10 p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <AlertCircle size={17} className="text-yellow-300" />
-              <p className="font-medium text-yellow-200">Needs Attention</p>
-            </div>
-
-            <div className="space-y-2">
-              {alerts.map((alert) => (
-                <p key={alert} className="text-sm text-slate-300">
-                  • {alert}
-                </p>
-              ))}
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_0.9fr]">
-        <section className="rounded-2xl border border-white/10 bg-[#071018]/80 p-5 backdrop-blur-xl">
-          <div className="mb-5 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">Campaign Pulse</h3>
-            <a href="/admin/campaigns" className="text-sm text-cyan-300">
-              Manage →
-            </a>
-          </div>
-
-          <div className="overflow-hidden rounded-2xl border border-white/10">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-white/[0.03] text-slate-400">
-                <tr>
-                  <th className="px-4 py-4 font-medium">Campaign</th>
-                  <th className="px-4 py-4 font-medium">Leads</th>
-                  <th className="px-4 py-4 font-medium">Assigned</th>
-                  <th className="px-4 py-4 font-medium">Completed</th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-white/10">
-                {campaignPulse.map((campaign) => (
-                  <tr key={campaign.campaign} className="text-slate-300">
-                    <td className="px-4 py-4 text-white">{campaign.campaign}</td>
-                    <td className="px-4 py-4">{campaign.leads}</td>
-                    <td className="px-4 py-4">{campaign.assigned}</td>
-                    <td className="px-4 py-4 text-cyan-300">
-                      {campaign.completed}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-white/10 bg-[#071018]/80 p-5 backdrop-blur-xl">
-          <h3 className="mb-5 text-lg font-semibold text-white">
-            Today’s Summary
-          </h3>
-
-          <div className="grid gap-3">
-            <SummaryRow label="Calls Completed" value="184" icon={PhoneCall} />
-            <SummaryRow label="Agents Present" value="12 / 14" icon={Users} />
-            <SummaryRow label="Follow-ups Due" value="23" icon={Clock3} />
-            <SummaryRow label="Meetings Booked" value="6" icon={CalendarCheck} />
-          </div>
-        </section>
+        </div>
       </div>
     </AdminShell>
-  );
-}
-
-function AdminAction({ href, label, icon: Icon }) {
-  return (
-    <a
-      href={href}
-      className="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-300 transition hover:border-cyan-300/30 hover:text-cyan-200"
-    >
-      <span className="flex items-center gap-2">
-        <Icon size={16} />
-        {label}
-      </span>
-      <ArrowRight size={16} />
-    </a>
-  );
-}
-
-function SummaryRow({ label, value, icon: Icon }) {
-  return (
-    <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 p-4">
-      <span className="flex items-center gap-3 text-sm text-slate-300">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-300/10 text-cyan-300">
-          <Icon size={16} />
-        </span>
-        {label}
-      </span>
-
-      <span className="font-semibold text-white">{value}</span>
-    </div>
   );
 }

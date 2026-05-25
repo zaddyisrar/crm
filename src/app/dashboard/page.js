@@ -34,19 +34,40 @@ function getTimeNow() {
 }
 
 function getWorkDuration(checkInTime) {
-  if (!checkInTime) return "Active";
+  if (!checkInTime) return "0h 0m";
 
   const now = new Date();
-  const today = new Date().toDateString();
-  const checkInDate = new Date(`${today} ${checkInTime}`);
 
-  if (Number.isNaN(checkInDate.getTime())) return "Active";
+  const checkIn = new Date();
+  const [time, modifier] = checkInTime.split(" ");
 
-  const diff = now.getTime() - checkInDate.getTime();
-  const hours = Math.floor(diff / 1000 / 60 / 60);
-  const minutes = Math.floor((diff / 1000 / 60) % 60);
+  let [hours, minutes] = time.split(":").map(Number);
 
-  return `${hours}h ${minutes}m`;
+  if (modifier === "PM" && hours !== 12) {
+    hours += 12;
+  }
+
+  if (modifier === "AM" && hours === 12) {
+    hours = 0;
+  }
+
+  checkIn.setHours(hours);
+  checkIn.setMinutes(minutes);
+  checkIn.setSeconds(0);
+
+  // crossed midnight
+  if (checkIn > now) {
+    checkIn.setDate(checkIn.getDate() - 1);
+  }
+
+  const diff = now - checkIn;
+
+  const totalMinutes = Math.floor(diff / 1000 / 60);
+
+  const hrs = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+
+  return `${hrs}h ${mins}m`;
 }
 
 const clientOptions = [
@@ -70,7 +91,6 @@ const clientOptions = [
 
 export default function DashboardPage() {
   const [agentName, setAgentName] = useState("Agent");
-  const [campaign, setCampaign] = useState("No Campaign");
   const [checkInTime, setCheckInTime] = useState("");
   const [workHours, setWorkHours] = useState("Active");
 
@@ -90,19 +110,17 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const userId = localStorage.getItem("crmUserId");
-    const savedCampaign = localStorage.getItem("crmCampaign");
 
     if (userId) {
       setAgentName(formatAgentName(userId));
 
       const savedCheckIn = localStorage.getItem(`crmCheckInTime:${userId}`);
+
       if (savedCheckIn) {
         setCheckInTime(savedCheckIn);
         setWorkHours(getWorkDuration(savedCheckIn));
       }
     }
-
-    if (savedCampaign) setCampaign(savedCampaign);
   }, []);
 
   useEffect(() => {
@@ -174,10 +192,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <PageShell
-      title={`Hello, Good Morning ${agentName}`}
-      subtitle={`Campaign: ${campaign}`}
-    >
+    <PageShell title={`Hello, Good Morning ${agentName}`} subtitle="">
       <div className="mb-2.5 flex flex-col gap-2 rounded-2xl border border-white/10 bg-[#071018]/80 px-3 py-2.5 backdrop-blur-xl xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-300/70">
@@ -201,29 +216,9 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-2.5 md:grid-cols-3">
-        <DashboardCard
-          label="Current Client"
-          value={selectedClient.company}
-          note={selectedClient.name}
-          icon={Building2}
-          tone="text-cyan-300"
-        />
-
-        <DashboardCard
-          label="Leads Today"
-          value={leads.length}
-          note="Manually added leads"
-          icon={Users}
-          tone="text-green-300"
-        />
-
-        <DashboardCard
-          label="Work Hours"
-          value={workHours}
-          note={checkInTime ? `Checked in at ${checkInTime}` : "After login"}
-          icon={Clock3}
-          tone="text-yellow-300"
-        />
+        <DashboardCard label="Current Client" value={selectedClient.company} note={selectedClient.name} icon={Building2} tone="text-cyan-300" />
+        <DashboardCard label="Leads Today" value={leads.length} note="Manually added leads" icon={Users} tone="text-green-300" />
+        <DashboardCard label="Work Hours" value={workHours} note={checkInTime ? `Checked in at ${checkInTime}` : "After login"} icon={Clock3} tone="text-yellow-300" />
       </div>
 
       <div className="mt-3 grid gap-3 xl:grid-cols-[1.2fr_0.55fr]">
@@ -232,9 +227,7 @@ export default function DashboardPage() {
             <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-300/70">
               Manual Entry
             </p>
-            <h2 className="text-sm font-semibold text-white">
-              Add Lead Data
-            </h2>
+            <h2 className="text-sm font-semibold text-white">Add Lead Data</h2>
           </div>
 
           <form onSubmit={handleSubmit} className="grid gap-2 md:grid-cols-3">
@@ -272,10 +265,7 @@ export default function DashboardPage() {
               <tbody className="divide-y divide-white/10">
                 {leads.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan="6"
-                      className="px-3 py-4 text-center text-[11px] text-slate-500"
-                    >
+                    <td colSpan="6" className="px-3 py-4 text-center text-[11px] text-slate-500">
                       No leads added yet.
                     </td>
                   </tr>
@@ -286,9 +276,7 @@ export default function DashboardPage() {
                       <td className="px-2 py-2">{lead.company}</td>
                       <td className="px-2 py-2 text-cyan-300">{lead.phone}</td>
                       <td className="px-2 py-2">{lead.address || "-"}</td>
-                      <td className="max-w-[150px] truncate px-2 py-2">
-                        {lead.note || "-"}
-                      </td>
+                      <td className="max-w-[150px] truncate px-2 py-2">{lead.note || "-"}</td>
                       <td className="px-2 py-2 text-slate-500">{lead.time}</td>
                     </tr>
                   ))
@@ -304,9 +292,7 @@ export default function DashboardPage() {
               <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-300/70">
                 Live Log
               </p>
-              <h2 className="text-sm font-semibold text-white">
-                Recent Activity
-              </h2>
+              <h2 className="text-sm font-semibold text-white">Recent Activity</h2>
             </div>
 
             <span className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-[10px] text-emerald-300">
@@ -316,14 +302,10 @@ export default function DashboardPage() {
 
           <div className="space-y-1.5">
             {recentActivity.map((item, index) => (
-              <div
-                key={`${item.text}-${index}`}
-                className="flex items-start gap-2 border-b border-white/10 pb-1.5 last:border-b-0"
-              >
+              <div key={`${item.text}-${index}`} className="flex items-start gap-2 border-b border-white/10 pb-1.5 last:border-b-0">
                 <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-300/10 text-cyan-300">
                   <Activity size={10} />
                 </div>
-
                 <div>
                   <p className="text-[10px] text-slate-400">{item.time}</p>
                   <p className="text-[10px] text-slate-200">{item.text}</p>
@@ -333,9 +315,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="mt-2.5 rounded-2xl border border-cyan-300/15 bg-cyan-300/10 p-2.5">
-            <p className="text-[11px] font-medium text-cyan-200">
-              Selected Client
-            </p>
+            <p className="text-[11px] font-medium text-cyan-200">Selected Client</p>
 
             <div className="mt-1.5 space-y-1 text-[10px] text-slate-300">
               <p className="flex items-center gap-1.5">
@@ -360,27 +340,17 @@ export default function DashboardPage() {
           <div className="w-full max-w-3xl rounded-3xl border border-cyan-300/15 bg-[#071018] p-5 shadow-[0_0_80px_rgba(34,211,238,0.08)]">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h3 className="text-xl font-semibold text-white">
-                  Select Client
-                </h3>
-                <p className="mt-1 text-xs text-slate-400">
-                  Choose from commercial cleaning client list.
-                </p>
+                <h3 className="text-xl font-semibold text-white">Select Client</h3>
+                <p className="mt-1 text-xs text-slate-400">Choose from commercial cleaning client list.</p>
               </div>
 
-              <button
-                onClick={() => setIsClientModalOpen(false)}
-                className="rounded-xl border border-white/10 p-2 text-slate-400 hover:text-white"
-              >
+              <button onClick={() => setIsClientModalOpen(false)} className="rounded-xl border border-white/10 p-2 text-slate-400 hover:text-white">
                 <X size={17} />
               </button>
             </div>
 
             <div className="relative mb-4">
-              <Search
-                size={17}
-                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
-              />
+              <Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
                 value={clientSearch}
                 onChange={(e) => setClientSearch(e.target.value)}
@@ -402,12 +372,8 @@ export default function DashboardPage() {
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-sm font-medium text-white">
-                        {client.company}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-400">
-                        {client.name}
-                      </p>
+                      <p className="text-sm font-medium text-white">{client.company}</p>
+                      <p className="mt-1 text-xs text-slate-400">{client.name}</p>
                     </div>
 
                     {selectedClient.id === client.id ? (
@@ -457,9 +423,7 @@ function DashboardCard({ label, value, note, icon: Icon, tone }) {
 function Field({ label, ...props }) {
   return (
     <div>
-      <label className="mb-0.5 block text-[10px] text-slate-300">
-        {label}
-      </label>
+      <label className="mb-0.5 block text-[10px] text-slate-300">{label}</label>
       <input
         {...props}
         className="w-full rounded-lg border border-white/10 bg-black/25 px-2.5 py-1.5 text-[11px] text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/35"

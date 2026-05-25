@@ -1,18 +1,29 @@
+"use client";
+
 import { CalendarDays } from "lucide-react";
 
-export default function Topbar({ title = "Dashboard", subtitle = "Welcome back." }) {
+export default function Topbar({ title, subtitle }) {
+  const today = new Date().toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
   return (
-    <header className="mb-7 flex flex-col justify-between gap-4 md:flex-row md:items-start">
+    <header className="mb-7 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
       <div>
-        <h2 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">
+        <h1 className="text-4xl font-black tracking-tight text-white xl:text-5xl">
           {title}
-        </h2>
-        <p className="mt-2 text-base text-slate-400">{subtitle}</p>
+        </h1>
+
+        {subtitle ? (
+          <p className="mt-3 text-lg text-slate-400">{subtitle}</p>
+        ) : null}
       </div>
 
-      <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.035] px-5 py-3 text-sm text-slate-300 shadow-[0_0_35px_rgba(34,211,238,0.04)] backdrop-blur-xl">
-        <CalendarDays size={18} className="text-cyan-200" />
-        May 24, 2025
+      <div className="flex items-center gap-3 rounded-2xl border border-cyan-300/10 bg-[#071018]/80 px-5 py-4 text-slate-300">
+        <CalendarDays size={18} className="text-cyan-300" />
+        <span>{today}</span>
       </div>
     </header>
   );
