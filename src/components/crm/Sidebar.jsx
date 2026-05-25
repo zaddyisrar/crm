@@ -20,7 +20,6 @@ import {
 const navItems = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Leads", href: "/leads", icon: Users },
-  { name: "Companies", href: "/companies", icon: Building2 },
   { name: "Attendance", href: "/attendance", icon: Clock3 },
   { name: "Calls", href: "/calls", icon: Phone },
   { name: "Meetings", href: "/meetings", icon: CalendarDays },

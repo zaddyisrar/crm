@@ -1,133 +1,334 @@
-'use client';
+"use client";
 
-import PageShell from '@/components/crm/PageShell';
-import SectionCard from '@/components/crm/SectionCard';
-import { analyticsData } from '@/data/crmData';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import {
+  PhoneCall,
+  CalendarCheck,
+  Target,
+  TrendingUp,
+  Clock3,
+  Trophy,
+  Flame,
+  Activity,
+} from "lucide-react";
+
+import PageShell from "@/components/crm/PageShell";
+import SectionCard from "@/components/crm/SectionCard";
+
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+} from "recharts";
+
+const weeklyData = [
+  { day: "Mon", calls: 14, interested: 4, meetings: 1 },
+  { day: "Tue", calls: 18, interested: 5, meetings: 2 },
+  { day: "Wed", calls: 11, interested: 3, meetings: 1 },
+  { day: "Thu", calls: 24, interested: 8, meetings: 3 },
+  { day: "Fri", calls: 19, interested: 6, meetings: 2 },
+  { day: "Sat", calls: 28, interested: 9, meetings: 3 },
+];
+
+const stats = [
+  {
+    label: "Calls Completed",
+    value: "127",
+    note: "+8 this week",
+    icon: PhoneCall,
+    color: "text-cyan-300",
+  },
+  {
+    label: "Interested Leads",
+    value: "38",
+    note: "Hot prospects",
+    icon: Target,
+    color: "text-yellow-300",
+  },
+  {
+    label: "Meetings Booked",
+    value: "12",
+    note: "+3 this week",
+    icon: CalendarCheck,
+    color: "text-green-300",
+  },
+  {
+    label: "Conversion Rate",
+    value: "28%",
+    note: "Personal performance",
+    icon: TrendingUp,
+    color: "text-purple-300",
+  },
+];
+
+const achievements = [
+  {
+    title: "Best Call Day",
+    value: "28 Calls",
+    note: "Saturday",
+    icon: Trophy,
+  },
+  {
+    title: "Avg Daily Calls",
+    value: "19",
+    note: "This week",
+    icon: PhoneCall,
+  },
+  {
+    title: "Avg Call Time",
+    value: "09:45",
+    note: "Per connected call",
+    icon: Clock3,
+  },
+];
+
+const breakdown = [
+  {
+    label: "Call Target",
+    value: "127 / 150",
+    percentage: 84,
+  },
+  {
+    label: "Interested Target",
+    value: "38 / 45",
+    percentage: 84,
+  },
+  {
+    label: "Meeting Target",
+    value: "12 / 15",
+    percentage: 80,
+  },
+  {
+    label: "Weekly Consistency",
+    value: "6 / 6 Days",
+    percentage: 100,
+  },
+];
 
 export default function AnalyticsPage() {
-  const stats = [
-    { label: 'Total Leads', value: '168', change: '+12%', color: 'text-blue-300' },
-    { label: 'Conversion Rate', value: '28%', change: '+5%', color: 'text-green-300' },
-    { label: 'Calls Completed', value: '127', change: '+8%', color: 'text-cyan-300' },
-    { label: 'Meetings Booked', value: '32', change: '+15%', color: 'text-purple-300' }
-  ];
-
-  const breakdown = [
-    { label: 'Leads Today', value: 24, percentage: 14, color: 'bg-blue-500' },
-    { label: 'Calls Today', value: 18, percentage: 14, color: 'bg-cyan-500' },
-    { label: 'Meetings Today', value: 5, percentage: 16, color: 'bg-purple-500' },
-    { label: 'Conversion This Week', value: '28%', percentage: 28, color: 'bg-green-500' }
-  ];
-
   return (
-    <PageShell title="Analytics" subtitle="Key metrics and insights">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {stats.map((stat, idx) => (
-          <SectionCard key={idx}>
-            <div className="text-center">
-              <p className="text-slate-400 text-xs mb-2 uppercase tracking-wider">
-                {stat.label}
-              </p>
-              <p className={`text-3xl font-bold ${stat.color} mb-2`}>{stat.value}</p>
-              <p className="text-xs text-green-400">{stat.change} this week</p>
-            </div>
-          </SectionCard>
-        ))}
+    <PageShell
+      title="Analytics"
+      subtitle="Track your personal performance and weekly progress."
+    >
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+
+          return (
+            <SectionCard key={stat.label}>
+              <div className="text-center">
+                <div className="mb-3 flex justify-center">
+                  <div className={`rounded-2xl bg-white/5 p-3 ${stat.color}`}>
+                    <Icon size={22} />
+                  </div>
+                </div>
+
+                <p className="text-xs uppercase tracking-widest text-slate-500">
+                  {stat.label}
+                </p>
+
+                <p className={`mt-3 text-3xl font-bold ${stat.color}`}>
+                  {stat.value}
+                </p>
+
+                <p className="mt-2 text-xs text-slate-400">{stat.note}</p>
+              </div>
+            </SectionCard>
+          );
+        })}
       </div>
 
-      {/* Line Chart */}
-      <SectionCard title="Weekly Trend" subtitle="Leads, calls, and meetings over the week" className="mb-6">
-        <div className="w-full h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={analyticsData}>
-              <defs>
-                <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1} />
-                </linearGradient>
-                <linearGradient id="colorCalls" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.8} />
-                  <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.1} />
-                </linearGradient>
-                <linearGradient id="colorMeetings" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#a855f7" stopOpacity={0.8} />
-                  <stop offset="95%" stopColor="#a855f7" stopOpacity={0.1} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(34, 211, 238, 0.1)" />
-              <XAxis dataKey="date" stroke="#94a3b8" />
-              <YAxis stroke="#94a3b8" />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                  border: '1px solid rgba(34, 211, 238, 0.3)',
-                  borderRadius: '8px'
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="leads"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                dot={{ fill: '#3b82f6', r: 5 }}
-                activeDot={{ r: 7 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="calls"
-                stroke="#06b6d4"
-                strokeWidth={2}
-                dot={{ fill: '#06b6d4', r: 5 }}
-                activeDot={{ r: 7 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="meetings"
-                stroke="#a855f7"
-                strokeWidth={2}
-                dot={{ fill: '#a855f7', r: 5 }}
-                activeDot={{ r: 7 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="flex gap-6 mt-6 flex-wrap">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-            <span className="text-xs text-slate-400">Leads</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-cyan-500"></div>
-            <span className="text-xs text-slate-400">Calls</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-            <span className="text-xs text-slate-400">Meetings</span>
-          </div>
-        </div>
-      </SectionCard>
+      <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+        <SectionCard
+          title="Weekly Performance"
+          subtitle="Calls, interested leads, and meetings booked"
+        >
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={weeklyData}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="rgba(34, 211, 238, 0.08)"
+                />
+                <XAxis dataKey="day" stroke="#94a3b8" />
+                <YAxis stroke="#94a3b8" />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "rgba(3, 6, 11, 0.95)",
+                    border: "1px solid rgba(34, 211, 238, 0.25)",
+                    borderRadius: "12px",
+                    color: "#e2e8f0",
+                  }}
+                />
 
-      {/* Breakdown */}
-      <SectionCard title="Performance Breakdown" subtitle="Quick metrics summary">
-        <div className="space-y-4">
-          {breakdown.map((item, idx) => (
-            <div key={idx} className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-slate-300">{item.label}</span>
-                <span className="text-sm font-bold text-cyan-300">{item.value}</span>
+                <Line
+                  type="monotone"
+                  dataKey="calls"
+                  stroke="#22d3ee"
+                  strokeWidth={2}
+                  dot={{ fill: "#22d3ee", r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+
+                <Line
+                  type="monotone"
+                  dataKey="interested"
+                  stroke="#facc15"
+                  strokeWidth={2}
+                  dot={{ fill: "#facc15", r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+
+                <Line
+                  type="monotone"
+                  dataKey="meetings"
+                  stroke="#4ade80"
+                  strokeWidth={2}
+                  dot={{ fill: "#4ade80", r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-5">
+            <Legend color="bg-cyan-300" label="Calls" />
+            <Legend color="bg-yellow-300" label="Interested" />
+            <Legend color="bg-green-300" label="Meetings" />
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Performance Targets" subtitle="Weekly goal progress">
+          <div className="space-y-5">
+            {breakdown.map((item) => (
+              <div key={item.label}>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm font-medium text-slate-300">
+                    {item.label}
+                  </span>
+                  <span className="text-sm font-semibold text-cyan-300">
+                    {item.value}
+                  </span>
+                </div>
+
+                <div className="h-2 overflow-hidden rounded-full border border-cyan-500/10 bg-slate-800/40">
+                  <div
+                    className="h-full rounded-full bg-cyan-400"
+                    style={{ width: `${item.percentage}%` }}
+                  />
+                </div>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  {item.percentage}% completed
+                </p>
               </div>
-              <div className="w-full bg-slate-800/30 rounded-full h-2 border border-cyan-500/10 overflow-hidden">
+            ))}
+          </div>
+        </SectionCard>
+      </div>
+
+      <div className="mt-5 grid gap-5 xl:grid-cols-[0.85fr_1.15fr]">
+        <SectionCard title="Achievements" subtitle="Your best performance stats">
+          <div className="space-y-4">
+            {achievements.map((item) => {
+              const Icon = item.icon;
+
+              return (
                 <div
-                  className={`h-full rounded-full ${item.color}`}
-                  style={{ width: `${item.percentage}%` }}
-                ></div>
+                  key={item.title}
+                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 p-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-300/10 text-cyan-300">
+                      <Icon size={18} />
+                    </div>
+
+                    <div>
+                      <p className="font-medium text-white">{item.title}</p>
+                      <p className="mt-1 text-xs text-slate-500">{item.note}</p>
+                    </div>
+                  </div>
+
+                  <span className="text-sm font-semibold text-cyan-300">
+                    {item.value}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Agent Insight" subtitle="Simple performance summary">
+          <div className="rounded-2xl border border-cyan-300/15 bg-cyan-300/10 p-5">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/20 bg-black/20 text-cyan-300">
+                <Flame size={22} />
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold text-white">
+                  Strong week so far
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-slate-300">
+                  Your calls and interested leads are trending upward. Keep the
+                  focus on follow-ups and push more interested prospects toward
+                  meetings.
+                </p>
               </div>
             </div>
-          ))}
-        </div>
-      </SectionCard>
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <MiniInsight
+              icon={Activity}
+              label="Consistency"
+              value="High"
+              tone="text-green-300"
+            />
+            <MiniInsight
+              icon={PhoneCall}
+              label="Call Volume"
+              value="Good"
+              tone="text-cyan-300"
+            />
+            <MiniInsight
+              icon={CalendarCheck}
+              label="Booking Push"
+              value="Needs Focus"
+              tone="text-yellow-300"
+            />
+          </div>
+        </SectionCard>
+      </div>
     </PageShell>
+  );
+}
+
+function Legend({ color, label }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className={`h-3 w-3 rounded-full ${color}`} />
+      <span className="text-xs text-slate-400">{label}</span>
+    </div>
+  );
+}
+
+function MiniInsight({ icon: Icon, label, value, tone }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-center">
+      <div className={`mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 ${tone}`}>
+        <Icon size={17} />
+      </div>
+
+      <p className="text-xs uppercase tracking-widest text-slate-500">
+        {label}
+      </p>
+
+      <p className={`mt-2 text-sm font-semibold ${tone}`}>{value}</p>
+    </div>
   );
 }
