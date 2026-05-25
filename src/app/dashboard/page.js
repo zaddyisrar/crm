@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import {
   Users,
   Clock3,
@@ -21,21 +24,49 @@ const focusItems = [
 
 const recentActivity = [
   { time: "09:05 AM", text: "Logged in successfully" },
-  { time: "09:07 AM", text: "Commercial Cleaning campaign selected" },
+  { time: "09:07 AM", text: "Campaign selected" },
   { time: "09:20 AM", text: "First call session started" },
   { time: "10:15 AM", text: "3 leads updated today" },
 ];
 
+function formatAgentName(value) {
+  if (!value) return "Agent";
+
+  return value
+    .replace(/^LR-/i, "")
+    .replace(/[-_]/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 export default function DashboardPage() {
+  const [agentName, setAgentName] = useState("Agent");
+  const [campaign, setCampaign] = useState("Commercial Cleaning");
+  const [checkInTime, setCheckInTime] = useState("09:05 AM");
+
+  useEffect(() => {
+    const userId = localStorage.getItem("crmUserId");
+    const savedCampaign = localStorage.getItem("crmCampaign");
+
+    if (userId) {
+      setAgentName(formatAgentName(userId));
+
+      const savedCheckIn = localStorage.getItem(`crmCheckInTime:${userId}`);
+      if (savedCheckIn) setCheckInTime(savedCheckIn);
+    }
+
+    if (savedCampaign) setCampaign(savedCampaign);
+  }, []);
+
   return (
     <PageShell
-      title="Good Morning, Muhammad 👋"
+      title={`Good Morning, ${agentName} 👋`}
       subtitle="Simple overview of today’s CRM activity."
     >
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Current Campaign"
-          value="Commercial Cleaning"
+          value={campaign}
           note="Active campaign"
           icon={Target}
           accent="cyan"
@@ -43,7 +74,7 @@ export default function DashboardPage() {
         <StatCard
           label="Attendance"
           value="Present"
-          note="Checked in at 09:05 AM"
+          note={`Checked in at ${checkInTime}`}
           icon={UserCheck}
           accent="green"
         />
@@ -56,8 +87,8 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Work Hours"
-          value="04:32"
-          note="Today’s total"
+          value="Active"
+          note="Counting until logout"
           icon={Clock3}
           accent="yellow"
         />
