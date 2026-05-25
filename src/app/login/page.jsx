@@ -33,17 +33,20 @@ export default function LoginPage() {
       );
 
       if (checkedOutDate === today) {
-        setError(
-          "You have already checked out today. Same-day login is locked."
-        );
+        setError("You already checked out today. Same-day login is locked.");
         return;
       }
 
-      const existingCheckIn = localStorage.getItem(
-        `crmCheckInTime:${cleanUserId}`
+      const previousCheckDate = localStorage.getItem(
+        `crmCheckInDate:${cleanUserId}`
       );
 
-      if (!existingCheckIn) {
+      if (previousCheckDate !== today) {
+        localStorage.removeItem(`crmCheckInTime:${cleanUserId}`);
+        localStorage.removeItem(`crmCheckOutTime:${cleanUserId}`);
+      }
+
+      if (!localStorage.getItem(`crmCheckInTime:${cleanUserId}`)) {
         localStorage.setItem(
           `crmCheckInTime:${cleanUserId}`,
           new Date().toLocaleTimeString([], {
@@ -51,6 +54,7 @@ export default function LoginPage() {
             minute: "2-digit",
           })
         );
+
         localStorage.setItem(`crmCheckInDate:${cleanUserId}`, today);
       }
     }
