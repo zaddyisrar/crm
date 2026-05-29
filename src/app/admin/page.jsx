@@ -12,22 +12,33 @@ import {
 
 import AdminShell from "@/components/admin/AdminShell";
 import { users } from "@/data/users";
+import { sheetsGet } from "@/lib/sheetsApi";
 
 function getTodayKey() {
   return new Date().toISOString().split("T")[0];
 }
 
-function getSavedLeads(agentId) {
-  try {
-    return JSON.parse(localStorage.getItem(`crmLeads:${agentId}`) || "[]");
-  } catch {
-    return [];
+function normalizeDate(value) {
+  if (!value) return "";
+
+  if (value instanceof Date) {
+    return value.toISOString().split("T")[0];
   }
+
+  const stringValue = String(value);
+
+  if (stringValue.includes("T")) {
+    return stringValue.split("T")[0];
+  }
+
+  return stringValue;
 }
 
 export default function AdminPage() {
   const [adminName, setAdminName] = useState("Admin");
-  const [agentsData, setAgentsData] = useState([]);
+  const [attendanceRows, setAttendanceRows] = useState([]);
+  const [leadRows, setLeadRows] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const name = localStorage.getItem("crmUserName");
@@ -35,47 +46,69 @@ export default function AdminPage() {
 
     setAdminName(name || id || "Admin");
 
-    const today = getTodayKey();
+    async function loadSheetData() {
+      try {
+        const attendanceResponse = await sheetsGet("getAttendance");
+        const leadsResponse = await sheetsGet("getLeads");
 
-    const agents = users
-      .filter((user) => user.role === "agent")
-      .map((agent) => {
-        const checkInDate = localStorage.getItem(`crmCheckInDate:${agent.id}`);
-        const checkIn = localStorage.getItem(`crmCheckInTime:${agent.id}`);
-        const checkOutDate = localStorage.getItem(
-          `crmCheckedOutDate:${agent.id}`
-        );
-        const checkOut = localStorage.getItem(`crmCheckOutTime:${agent.id}`);
+        setAttendanceRows(attendanceResponse.data || []);
+        setLeadRows(leadsResponse.data || []);
+      } catch (error) {
+        console.error("Admin Google Sheets read failed:", error);
+        setAttendanceRows([]);
+        setLeadRows([]);
+      } finally {
+        setLoading(false);
+      }
+    }
 
-        const leads = getSavedLeads(agent.id);
-        const todayLeads = leads.filter((lead) => lead.date === today);
-
-        const presentToday = checkInDate === today;
-        const checkedOutToday = checkOutDate === today;
-        const activeNow = presentToday && !checkedOutToday;
-
-        return {
-          ...agent,
-          checkIn,
-          checkOut,
-          presentToday,
-          activeNow,
-          todayLeads,
-        };
-      });
-
-    setAgentsData(agents);
+    loadSheetData();
   }, []);
+
+  const today = getTodayKey();
+
+  const agentUsers = users.filter((user) => user.role === "agent");
+
+  const todayAttendance = attendanceRows.filter(
+    (row) => normalizeDate(row.Date) === today
+  );
+
+  const todayLeadsRows = leadRows.filter(
+    (row) => normalizeDate(row.Date) === today
+  );
+
+  const agentsData = agentUsers.map((agent) => {
+    const records = todayAttendance.filter(
+      (row) => String(row.AgentID).toUpperCase() === agent.id.toUpperCase()
+    );
+
+    const latestRecord = records[records.length - 1];
+
+    const presentToday = Boolean(latestRecord);
+    const checkedOutToday = Boolean(latestRecord?.CheckOut);
+    const activeNow = presentToday && !checkedOutToday;
+
+    const todayLeads = todayLeadsRows.filter(
+      (lead) => String(lead.AgentID).toUpperCase() === agent.id.toUpperCase()
+    );
+
+    return {
+      ...agent,
+      checkIn: latestRecord?.CheckIn || "",
+      checkOut: latestRecord?.CheckOut || "",
+      status: latestRecord?.Status || "Absent",
+      presentToday,
+      activeNow,
+      todayLeads,
+    };
+  });
 
   const availableClients = 16;
 
   const activeAgents = agentsData.filter((x) => x.activeNow).length;
   const presentAgents = agentsData.filter((x) => x.presentToday).length;
   const totalAgents = agentsData.length;
-  const todayLeads = agentsData.reduce(
-    (total, agent) => total + agent.todayLeads.length,
-    0
-  );
+  const todayLeads = todayLeadsRows.length;
 
   const attendanceRate =
     totalAgents > 0 ? Math.round((presentAgents / totalAgents) * 100) : 0;
@@ -96,7 +129,7 @@ export default function AdminPage() {
   const stats = [
     {
       title: "Active Agents",
-      value: activeAgents,
+      value: loading ? "..." : activeAgents,
       note: "Online now",
       icon: Users,
       color: "text-cyan-300",
@@ -110,25 +143,37 @@ export default function AdminPage() {
     },
     {
       title: "Working Clients",
-      value: activeAgents,
+      value: loading ? "..." : activeAgents,
       note: "Currently active",
       icon: BriefcaseBusiness,
       color: "text-yellow-300",
     },
     {
       title: "Attendance",
-      value: `${attendanceRate}%`,
-      note: `${presentAgents}/${totalAgents} present`,
+      value: loading ? "..." : `${attendanceRate}%`,
+      note: loading ? "Loading..." : `${presentAgents}/${totalAgents} present`,
       icon: Clock3,
       color: "text-purple-300",
     },
   ];
 
   const summary = [
-    { title: "Leads Added Today", value: todayLeads },
-    { title: "Present Agents", value: presentAgents },
-    { title: "Active Agents", value: activeAgents },
-    { title: "Available Clients", value: availableClients },
+    {
+      title: "Leads Added Today",
+      value: loading ? "..." : todayLeads,
+    },
+    {
+      title: "Present Agents",
+      value: loading ? "..." : presentAgents,
+    },
+    {
+      title: "Active Agents",
+      value: loading ? "..." : activeAgents,
+    },
+    {
+      title: "Available Clients",
+      value: availableClients,
+    },
   ];
 
   return (
@@ -143,7 +188,8 @@ export default function AdminPage() {
         </h1>
 
         <p className="mt-2 text-sm text-slate-500">
-          Showing today&apos;s attendance and saved lead activity only.
+          Showing today&apos;s attendance and saved lead activity from Google
+          Sheets.
         </p>
       </div>
 
@@ -179,7 +225,11 @@ export default function AdminPage() {
           </div>
 
           <div className="space-y-3">
-            {liveOperations.length === 0 ? (
+            {loading ? (
+              <div className="rounded-xl border border-white/5 bg-black/20 px-4 py-8 text-center text-sm text-slate-500">
+                Loading live operations...
+              </div>
+            ) : liveOperations.length === 0 ? (
               <div className="rounded-xl border border-white/5 bg-black/20 px-4 py-8 text-center text-sm text-slate-500">
                 No agent activity today.
               </div>
