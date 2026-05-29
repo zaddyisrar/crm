@@ -2,15 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import {
-  usePathname,
-  useRouter,
-} from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import {
   LayoutDashboard,
   ClipboardCheck,
   LogOut,
+  Users,
 } from "lucide-react";
 
 const navItems = [
@@ -19,11 +17,15 @@ const navItems = [
     href: "/admin",
     icon: LayoutDashboard,
   },
-
   {
     name: "Attendance",
     href: "/admin/attendance",
     icon: ClipboardCheck,
+  },
+  {
+    name: "Leads",
+    href: "/admin/leads",
+    icon: Users,
   },
 ];
 
@@ -43,7 +45,6 @@ export default function AdminSidebar() {
 
   return (
     <aside className="fixed left-0 top-0 z-30 hidden h-screen w-72 border-r border-cyan-400/10 bg-[#03060b]/95 px-4 py-4 backdrop-blur-xl lg:flex lg:flex-col">
-
       <div className="mb-5 rounded-[2rem] border border-cyan-300/10 bg-white/[0.03] p-5">
         <div className="relative h-20 w-full">
           <Image
@@ -59,9 +60,7 @@ export default function AdminSidebar() {
       <nav className="flex-1 space-y-2">
         {navItems.map((item) => {
           const Icon = item.icon;
-
-          const active =
-            pathname === item.href;
+          const active = pathname === item.href;
 
           return (
             <Link
@@ -87,7 +86,6 @@ export default function AdminSidebar() {
         <LogOut size={16} />
         Logout
       </button>
-
     </aside>
   );
 }
