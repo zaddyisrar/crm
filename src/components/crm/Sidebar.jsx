@@ -3,11 +3,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  LayoutDashboard,
-  Clock3,
-  LogOut,
-} from "lucide-react";
+import { LayoutDashboard, Clock3, LogOut } from "lucide-react";
+
+import { sheetsPost } from "@/lib/sheetsApi";
 
 const navItems = [
   {
@@ -15,7 +13,6 @@ const navItems = [
     href: "/dashboard",
     icon: LayoutDashboard,
   },
-
   {
     name: "Attendance",
     href: "/attendance",
@@ -23,39 +20,55 @@ const navItems = [
   },
 ];
 
+function getTodayKey() {
+  return new Date().toISOString().split("T")[0];
+}
+
+function getTimeNow() {
+  return new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
 
-  function handleLogout() {
+  async function handleLogout() {
     const userId = localStorage.getItem("crmUserId");
+    const role = localStorage.getItem("crmRole");
 
-    if (userId) {
-      const today = new Date().toISOString().split("T")[0];
+    if (userId && role === "agent") {
+      const today = getTodayKey();
+      const checkOutTime = getTimeNow();
 
-      localStorage.setItem(
-        `crmCheckOutTime:${userId}`,
-        new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      );
+      localStorage.setItem(`crmCheckOutTime:${userId}`, checkOutTime);
+      localStorage.setItem(`crmCheckedOutDate:${userId}`, today);
 
-      localStorage.setItem(
-        `crmCheckedOutDate:${userId}`,
-        today
-      );
+      try {
+        await sheetsPost({
+          action: "checkOut",
+          agentId: userId,
+          date: today,
+          checkOut: checkOutTime,
+        });
+
+        console.log("Check-out synced to Google Sheets");
+      } catch (error) {
+        console.error("Google Sheets check-out failed:", error);
+      }
     }
 
     localStorage.removeItem("crmRole");
     localStorage.removeItem("crmUserId");
+    localStorage.removeItem("crmUserName");
 
     router.push("/login");
   }
 
   return (
     <aside className="fixed left-0 top-0 z-30 hidden h-screen w-72 flex-col border-r border-cyan-400/10 bg-[#03060b]/95 px-3 py-4 backdrop-blur-xl lg:flex">
-
       <div className="mb-4 shrink-0 rounded-3xl border border-cyan-400/15 bg-cyan-400/[0.03] p-4">
         <div className="relative h-20 w-full">
           <Image
@@ -71,7 +84,6 @@ export default function Sidebar() {
       <nav className="flex-1 space-y-1.5">
         {navItems.map((item) => {
           const Icon = item.icon;
-
           const active = pathname === item.href;
 
           return (
@@ -100,7 +112,6 @@ export default function Sidebar() {
           Logout
         </button>
       </div>
-
     </aside>
   );
 }
