@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import PageShell from "@/components/crm/PageShell";
+import { sheetsPost } from "@/lib/sheetsApi";
 
 function formatAgentName(value) {
   if (!value) return "Agent";
@@ -67,134 +68,22 @@ function getWorkDuration(checkInTime) {
 }
 
 const clientOptions = [
-  {
-    id: 1,
-    name: "Operations Team",
-    company: "Nova Building Maintenance",
-    phone: "+1 555 100 1001",
-    email: "contact@novabuildingmaintenance.com",
-    status: "New",
-  },
-  {
-    id: 2,
-    name: "Sales Team",
-    company: "Deepi Clean",
-    phone: "+1 555 100 1002",
-    email: "info@deepiclean.com",
-    status: "New",
-  },
-  {
-    id: 3,
-    name: "Management",
-    company: "Seagull Cleaning Services",
-    phone: "+1 555 100 1003",
-    email: "hello@seagullcleaningservices.com",
-    status: "New",
-  },
-  {
-    id: 4,
-    name: "Operations Team",
-    company: "Capital Facilities",
-    phone: "+1 555 100 1004",
-    email: "contact@capitalfacilities.com",
-    status: "New",
-  },
-  {
-    id: 5,
-    name: "Sales Team",
-    company: "Roli Cleaners",
-    phone: "+1 555 100 1005",
-    email: "info@rolicleaners.com",
-    status: "New",
-  },
-  {
-    id: 6,
-    name: "Reception",
-    company: "A1 Sunshine Cleaning",
-    phone: "+1 555 100 1006",
-    email: "contact@a1sunshinecleaning.com",
-    status: "New",
-  },
-  {
-    id: 7,
-    name: "Management",
-    company: "Multycerv Janitorial Services",
-    phone: "+1 555 100 1007",
-    email: "hello@multycervjanitorialservices.com",
-    status: "New",
-  },
-  {
-    id: 8,
-    name: "Office Team",
-    company: "Jaguar Cleaning Services Corp.",
-    phone: "+1 555 100 1008",
-    email: "contact@jaguarcleaningservices.com",
-    status: "New",
-  },
-  {
-    id: 9,
-    name: "Admin",
-    company: "Premium Maintenance Services Ltd.",
-    phone: "+1 555 100 1009",
-    email: "info@premiummaintenanceservices.com",
-    status: "New",
-  },
-  {
-    id: 10,
-    name: "Support",
-    company: "Dailycleans Commercial & Residential",
-    phone: "+1 555 100 1010",
-    email: "contact@dailycleans.com",
-    status: "New",
-  },
-  {
-    id: 11,
-    name: "Reception",
-    company: "Herewego",
-    phone: "+1 555 100 1011",
-    email: "hello@herewego.com",
-    status: "New",
-  },
-  {
-    id: 12,
-    name: "Management",
-    company: "Boston Cleaning Co., Inc.",
-    phone: "+1 555 100 1012",
-    email: "contact@bostoncleaningco.com",
-    status: "New",
-  },
-  {
-    id: 13,
-    name: "Sales Team",
-    company: "Shining Diamond by LS Cleaning Services",
-    phone: "+1 555 100 1013",
-    email: "info@shiningdiamondls.com",
-    status: "New",
-  },
-  {
-    id: 14,
-    name: "Operations",
-    company: "I & G Cleaning Services",
-    phone: "+1 555 100 1014",
-    email: "contact@igcleaningservices.com",
-    status: "New",
-  },
-  {
-    id: 15,
-    name: "Admin",
-    company: "Optimal Cleaning Services Ltd.",
-    phone: "+1 555 100 1015",
-    email: "hello@optimalcleaningservices.com",
-    status: "New",
-  },
-  {
-    id: 16,
-    name: "Support Team",
-    company: "Tetra Maintenance",
-    phone: "+1 555 100 1016",
-    email: "contact@tetramaintenance.com",
-    status: "New",
-  },
+  { id: 1, name: "Operations Team", company: "Nova Building Maintenance", phone: "+1 555 100 1001", email: "contact@novabuildingmaintenance.com", status: "New" },
+  { id: 2, name: "Sales Team", company: "Deepi Clean", phone: "+1 555 100 1002", email: "info@deepiclean.com", status: "New" },
+  { id: 3, name: "Management", company: "Seagull Cleaning Services", phone: "+1 555 100 1003", email: "hello@seagullcleaningservices.com", status: "New" },
+  { id: 4, name: "Operations Team", company: "Capital Facilities", phone: "+1 555 100 1004", email: "contact@capitalfacilities.com", status: "New" },
+  { id: 5, name: "Sales Team", company: "Roli Cleaners", phone: "+1 555 100 1005", email: "info@rolicleaners.com", status: "New" },
+  { id: 6, name: "Reception", company: "A1 Sunshine Cleaning", phone: "+1 555 100 1006", email: "contact@a1sunshinecleaning.com", status: "New" },
+  { id: 7, name: "Management", company: "Multycerv Janitorial Services", phone: "+1 555 100 1007", email: "hello@multycervjanitorialservices.com", status: "New" },
+  { id: 8, name: "Office Team", company: "Jaguar Cleaning Services Corp.", phone: "+1 555 100 1008", email: "contact@jaguarcleaningservices.com", status: "New" },
+  { id: 9, name: "Admin", company: "Premium Maintenance Services Ltd.", phone: "+1 555 100 1009", email: "info@premiummaintenanceservices.com", status: "New" },
+  { id: 10, name: "Support", company: "Dailycleans Commercial & Residential", phone: "+1 555 100 1010", email: "contact@dailycleans.com", status: "New" },
+  { id: 11, name: "Reception", company: "Herewego", phone: "+1 555 100 1011", email: "hello@herewego.com", status: "New" },
+  { id: 12, name: "Management", company: "Boston Cleaning Co., Inc.", phone: "+1 555 100 1012", email: "contact@bostoncleaningco.com", status: "New" },
+  { id: 13, name: "Sales Team", company: "Shining Diamond by LS Cleaning Services", phone: "+1 555 100 1013", email: "info@shiningdiamondls.com", status: "New" },
+  { id: 14, name: "Operations", company: "I & G Cleaning Services", phone: "+1 555 100 1014", email: "contact@igcleaningservices.com", status: "New" },
+  { id: 15, name: "Admin", company: "Optimal Cleaning Services Ltd.", phone: "+1 555 100 1015", email: "hello@optimalcleaningservices.com", status: "New" },
+  { id: 16, name: "Support Team", company: "Tetra Maintenance", phone: "+1 555 100 1016", email: "contact@tetramaintenance.com", status: "New" },
 ];
 
 export default function DashboardPage() {
@@ -300,7 +189,7 @@ export default function DashboardPage() {
     }));
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
 
     if (!form.name || !form.company || !form.phone) return;
@@ -317,6 +206,25 @@ export default function DashboardPage() {
     const nextLeads = [newLead, ...leads];
 
     saveLeadsForAgent(nextLeads);
+
+    try {
+      await sheetsPost({
+        action: "addLead",
+        agentId: newLead.agentId,
+        name: newLead.name,
+        company: newLead.company,
+        phone: newLead.phone,
+        email: newLead.email,
+        address: newLead.address,
+        note: newLead.note,
+        date: newLead.date,
+        time: newLead.time,
+      });
+
+      console.log("Lead synced to Google Sheets");
+    } catch (err) {
+      console.error("Google Sheets lead sync failed:", err);
+    }
 
     setForm({
       name: "",
@@ -390,62 +298,16 @@ export default function DashboardPage() {
             <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-300/70">
               Manual Entry
             </p>
-            <h2 className="text-sm font-semibold text-white">
-              Add Lead Data
-            </h2>
+            <h2 className="text-sm font-semibold text-white">Add Lead Data</h2>
           </div>
 
           <form onSubmit={handleSubmit} className="grid gap-2 md:grid-cols-3">
-            <Field
-              label="Client Name"
-              name="name"
-              value={form.name}
-              onChange={handleChange}
-              placeholder="John Carter"
-              required
-            />
-
-            <Field
-              label="Company"
-              name="company"
-              value={form.company}
-              onChange={handleChange}
-              placeholder={selectedClient.company}
-              required
-            />
-
-            <Field
-              label="Phone"
-              name="phone"
-              value={form.phone}
-              onChange={handleChange}
-              placeholder="+1 555 000 1234"
-              required
-            />
-
-            <Field
-              label="Email"
-              name="email"
-              value={form.email}
-              onChange={handleChange}
-              placeholder="john@company.com"
-            />
-
-            <Field
-              label="Address"
-              name="address"
-              value={form.address}
-              onChange={handleChange}
-              placeholder="Street, city, state"
-            />
-
-            <Field
-              label="Note"
-              name="note"
-              value={form.note}
-              onChange={handleChange}
-              placeholder="Short call note"
-            />
+            <Field label="Client Name" name="name" value={form.name} onChange={handleChange} placeholder="John Carter" required />
+            <Field label="Company" name="company" value={form.company} onChange={handleChange} placeholder={selectedClient.company} required />
+            <Field label="Phone" name="phone" value={form.phone} onChange={handleChange} placeholder="+1 555 000 1234" required />
+            <Field label="Email" name="email" value={form.email} onChange={handleChange} placeholder="john@company.com" />
+            <Field label="Address" name="address" value={form.address} onChange={handleChange} placeholder="Street, city, state" />
+            <Field label="Note" name="note" value={form.note} onChange={handleChange} placeholder="Short call note" />
 
             <div className="md:col-span-3">
               <button
@@ -474,10 +336,7 @@ export default function DashboardPage() {
               <tbody className="divide-y divide-white/10">
                 {leads.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan="6"
-                      className="px-3 py-4 text-center text-[11px] text-slate-500"
-                    >
+                    <td colSpan="6" className="px-3 py-4 text-center text-[11px] text-slate-500">
                       No leads added yet.
                     </td>
                   </tr>
@@ -488,9 +347,7 @@ export default function DashboardPage() {
                       <td className="px-2 py-2">{lead.company}</td>
                       <td className="px-2 py-2 text-cyan-300">{lead.phone}</td>
                       <td className="px-2 py-2">{lead.address || "-"}</td>
-                      <td className="max-w-[150px] truncate px-2 py-2">
-                        {lead.note || "-"}
-                      </td>
+                      <td className="max-w-[150px] truncate px-2 py-2">{lead.note || "-"}</td>
                       <td className="px-2 py-2 text-slate-500">{lead.time}</td>
                     </tr>
                   ))
@@ -506,9 +363,7 @@ export default function DashboardPage() {
               <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-300/70">
                 Live Log
               </p>
-              <h2 className="text-sm font-semibold text-white">
-                Recent Activity
-              </h2>
+              <h2 className="text-sm font-semibold text-white">Recent Activity</h2>
             </div>
 
             <span className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-[10px] text-emerald-300">
@@ -518,10 +373,7 @@ export default function DashboardPage() {
 
           <div className="space-y-1.5">
             {recentActivity.map((item, index) => (
-              <div
-                key={`${item.text}-${index}`}
-                className="flex items-start gap-2 border-b border-white/10 pb-1.5 last:border-b-0"
-              >
+              <div key={`${item.text}-${index}`} className="flex items-start gap-2 border-b border-white/10 pb-1.5 last:border-b-0">
                 <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-300/10 text-cyan-300">
                   <Activity size={10} />
                 </div>
@@ -562,9 +414,7 @@ export default function DashboardPage() {
           <div className="w-full max-w-3xl rounded-3xl border border-cyan-300/15 bg-[#071018] p-5 shadow-[0_0_80px_rgba(34,211,238,0.08)]">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h3 className="text-xl font-semibold text-white">
-                  Select Client
-                </h3>
+                <h3 className="text-xl font-semibold text-white">Select Client</h3>
                 <p className="mt-1 text-xs text-slate-400">
                   Choose from commercial cleaning client list.
                 </p>
@@ -579,10 +429,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="relative mb-4">
-              <Search
-                size={17}
-                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
-              />
+              <Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
 
               <input
                 value={clientSearch}
@@ -605,12 +452,8 @@ export default function DashboardPage() {
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-sm font-medium text-white">
-                        {client.company}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-400">
-                        {client.name}
-                      </p>
+                      <p className="text-sm font-medium text-white">{client.company}</p>
+                      <p className="mt-1 text-xs text-slate-400">{client.name}</p>
                     </div>
 
                     {selectedClient.id === client.id ? (
