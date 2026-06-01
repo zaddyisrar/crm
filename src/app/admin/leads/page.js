@@ -10,6 +10,7 @@ import {
   PhoneCall,
   MapPin,
   FileText,
+  CheckCircle2,
 } from "lucide-react";
 
 import AdminShell from "@/components/admin/AdminShell";
@@ -31,8 +32,31 @@ function normalizeDate(value) {
   return stringValue;
 }
 
+function getLeadKey(lead, index) {
+  return `${lead.AgentID || "agent"}-${lead.Phone || "phone"}-${index}`;
+}
+
+function StatusBadge({ status }) {
+  const styles = {
+    Pending: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+    Approved: "border-emerald-400/20 bg-emerald-400/10 text-emerald-300",
+    Rejected: "border-red-400/20 bg-red-400/10 text-red-300",
+  };
+
+  return (
+    <span
+      className={`inline-flex rounded-lg border px-3 py-1 text-xs font-medium ${
+        styles[status] || styles.Pending
+      }`}
+    >
+      {status}
+    </span>
+  );
+}
+
 export default function AdminLeadsPage() {
   const [leads, setLeads] = useState([]);
+  const [leadStatuses, setLeadStatuses] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -40,7 +64,18 @@ export default function AdminLeadsPage() {
     async function loadLeads() {
       try {
         const response = await sheetsGet("getLeads");
-        setLeads(response.data || []);
+        const sheetLeads = response.data || [];
+
+        setLeads(sheetLeads);
+
+        const initialStatuses = {};
+
+        sheetLeads.forEach((lead, index) => {
+          const key = getLeadKey(lead, index);
+          initialStatuses[key] = lead.ApprovalStatus || "Pending";
+        });
+
+        setLeadStatuses(initialStatuses);
       } catch (error) {
         console.error("Admin leads sheet read failed:", error);
         setLeads([]);
@@ -52,12 +87,22 @@ export default function AdminLeadsPage() {
     loadLeads();
   }, []);
 
+  function updateLeadStatus(leadKey, status) {
+    setLeadStatuses((prev) => ({
+      ...prev,
+      [leadKey]: status,
+    }));
+  }
+
   const today = getTodayKey();
 
   const filteredLeads = useMemo(() => {
     const search = searchTerm.toLowerCase();
 
-    return leads.filter((lead) => {
+    return leads.filter((lead, index) => {
+      const leadKey = getLeadKey(lead, index);
+      const status = leadStatuses[leadKey] || "Pending";
+
       return (
         String(lead.AgentID || "").toLowerCase().includes(search) ||
         String(lead.Name || "").toLowerCase().includes(search) ||
@@ -65,16 +110,21 @@ export default function AdminLeadsPage() {
         String(lead.Phone || "").toLowerCase().includes(search) ||
         String(lead.Email || "").toLowerCase().includes(search) ||
         String(lead.Address || "").toLowerCase().includes(search) ||
-        String(lead.Note || "").toLowerCase().includes(search)
+        String(lead.Note || "").toLowerCase().includes(search) ||
+        String(status || "").toLowerCase().includes(search)
       );
     });
-  }, [leads, searchTerm]);
+  }, [leads, searchTerm, leadStatuses]);
 
   const todayLeads = leads.filter((lead) => normalizeDate(lead.Date) === today);
 
-  const uniqueAgents = new Set(
-    leads.map((lead) => lead.AgentID).filter(Boolean)
-  ).size;
+  const approvedLeads = Object.values(leadStatuses).filter(
+    (status) => status === "Approved"
+  ).length;
+
+  const pendingLeads = Object.values(leadStatuses).filter(
+    (status) => status === "Pending"
+  ).length;
 
   const stats = [
     {
@@ -92,9 +142,16 @@ export default function AdminLeadsPage() {
       color: "text-green-300",
     },
     {
-      title: "Active Agents",
-      value: loading ? "..." : uniqueAgents,
-      note: "Agents with leads",
+      title: "Approved Leads",
+      value: loading ? "..." : approvedLeads,
+      note: "Frontend only",
+      icon: CheckCircle2,
+      color: "text-emerald-300",
+    },
+    {
+      title: "Pending Leads",
+      value: loading ? "..." : pendingLeads,
+      note: "Needs review",
       icon: Building2,
       color: "text-yellow-300",
     },
@@ -110,11 +167,11 @@ export default function AdminLeadsPage() {
         <h1 className="mt-3 text-4xl font-black text-white">Leads</h1>
 
         <p className="mt-2 text-sm text-slate-500">
-          All agent leads synced live from Google Sheets.
+          All agent leads synced from Google Sheets. Approval is frontend-only for now.
         </p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-4">
         {stats.map((card) => {
           const Icon = card.icon;
 
@@ -143,7 +200,7 @@ export default function AdminLeadsPage() {
           <div>
             <h2 className="text-lg font-bold text-white">All Leads</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Showing leads submitted by all agents.
+              Review submitted leads and mark them as approved or rejected.
             </p>
           </div>
 
@@ -155,7 +212,7 @@ export default function AdminLeadsPage() {
 
             <input
               type="text"
-              placeholder="Search leads..."
+              placeholder="Search leads, agent, status..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full rounded-xl border border-white/10 bg-black/20 py-3 pl-11 pr-4 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-cyan-300/35"
@@ -163,8 +220,8 @@ export default function AdminLeadsPage() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-white/10">
-          <table className="w-full min-w-[1100px] text-left text-sm">
+        <div className="overflow-x-auto rounded-2xl border border-white/10">
+          <table className="w-full min-w-[1350px] text-left text-sm">
             <thead className="bg-white/[0.03] text-slate-400">
               <tr>
                 <th className="px-4 py-4 font-medium">Agent ID</th>
@@ -174,6 +231,8 @@ export default function AdminLeadsPage() {
                 <th className="px-4 py-4 font-medium">Note</th>
                 <th className="px-4 py-4 font-medium">Date</th>
                 <th className="px-4 py-4 font-medium">Time</th>
+                <th className="px-4 py-4 font-medium">Status</th>
+                <th className="px-4 py-4 font-medium">Action</th>
               </tr>
             </thead>
 
@@ -181,7 +240,7 @@ export default function AdminLeadsPage() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan="7"
+                    colSpan="9"
                     className="px-4 py-12 text-center text-sm text-slate-500"
                   >
                     Loading leads from Google Sheets...
@@ -190,69 +249,96 @@ export default function AdminLeadsPage() {
               ) : filteredLeads.length === 0 ? (
                 <tr>
                   <td
-                    colSpan="7"
+                    colSpan="9"
                     className="px-4 py-12 text-center text-sm text-slate-500"
                   >
                     No leads found.
                   </td>
                 </tr>
               ) : (
-                filteredLeads.map((lead, index) => (
-                  <tr
-                    key={`${lead.AgentID}-${lead.Phone}-${index}`}
-                    className="text-slate-300 transition hover:bg-white/[0.02]"
-                  >
-                    <td className="px-4 py-4 text-cyan-300">
-                      {lead.AgentID || "-"}
-                    </td>
+                filteredLeads.map((lead, index) => {
+                  const leadKey = getLeadKey(lead, index);
+                  const status = leadStatuses[leadKey] || "Pending";
 
-                    <td className="px-4 py-4">
-                      <p className="font-medium text-white">
-                        {lead.Name || "-"}
-                      </p>
-                      <p className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-                        <Building2 size={13} />
-                        {lead.Company || "-"}
-                      </p>
-                    </td>
+                  return (
+                    <tr
+                      key={leadKey}
+                      className="text-slate-300 transition hover:bg-white/[0.02]"
+                    >
+                      <td className="px-4 py-4 text-cyan-300">
+                        {lead.AgentID || "-"}
+                      </td>
 
-                    <td className="px-4 py-4">
-                      <div className="space-y-1">
-                        <p className="flex items-center gap-2 text-xs text-slate-300">
-                          <PhoneCall size={13} className="text-cyan-300" />
-                          {lead.Phone || "-"}
+                      <td className="px-4 py-4">
+                        <p className="font-medium text-white">
+                          {lead.Name || "-"}
                         </p>
-
-                        <p className="flex items-center gap-2 text-xs text-slate-500">
-                          <Mail size={13} />
-                          {lead.Email || "-"}
+                        <p className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+                          <Building2 size={13} />
+                          {lead.Company || "-"}
                         </p>
-                      </div>
-                    </td>
+                      </td>
 
-                    <td className="px-4 py-4">
-                      <p className="flex items-center gap-2 text-xs text-slate-400">
-                        <MapPin size={13} className="text-cyan-300" />
-                        {lead.Address || "-"}
-                      </p>
-                    </td>
+                      <td className="px-4 py-4">
+                        <div className="space-y-1">
+                          <p className="flex items-center gap-2 text-xs text-slate-300">
+                            <PhoneCall size={13} className="text-cyan-300" />
+                            {lead.Phone || "-"}
+                          </p>
 
-                    <td className="max-w-[220px] px-4 py-4">
-                      <p className="flex items-center gap-2 truncate text-xs text-slate-400">
-                        <FileText size={13} className="text-cyan-300" />
-                        {lead.Note || "-"}
-                      </p>
-                    </td>
+                          <p className="flex items-center gap-2 text-xs text-slate-500">
+                            <Mail size={13} />
+                            {lead.Email || "-"}
+                          </p>
+                        </div>
+                      </td>
 
-                    <td className="px-4 py-4 text-slate-400">
-                      {normalizeDate(lead.Date) || "-"}
-                    </td>
+                      <td className="px-4 py-4">
+                        <p className="flex items-center gap-2 text-xs text-slate-400">
+                          <MapPin size={13} className="text-cyan-300" />
+                          {lead.Address || "-"}
+                        </p>
+                      </td>
 
-                    <td className="px-4 py-4 text-slate-400">
-                      {lead.Time || "-"}
-                    </td>
-                  </tr>
-                ))
+                      <td className="max-w-[220px] px-4 py-4">
+                        <p className="flex items-center gap-2 truncate text-xs text-slate-400">
+                          <FileText size={13} className="text-cyan-300" />
+                          {lead.Note || "-"}
+                        </p>
+                      </td>
+
+                      <td className="px-4 py-4 text-slate-400">
+                        {normalizeDate(lead.Date) || "-"}
+                      </td>
+
+                      <td className="px-4 py-4 text-slate-400">
+                        {lead.Time || "-"}
+                      </td>
+
+                      <td className="px-4 py-4">
+                        <StatusBadge status={status} />
+                      </td>
+
+                      <td className="px-4 py-4">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => updateLeadStatus(leadKey, "Approved")}
+                            className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-400/15"
+                          >
+                            Approve
+                          </button>
+
+                          <button
+                            onClick={() => updateLeadStatus(leadKey, "Rejected")}
+                            className="rounded-lg border border-red-400/20 bg-red-400/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-400/15"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

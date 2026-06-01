@@ -1,0 +1,18 @@
+export const clientOptions = [
+  { id: 1, name: "Operations Team", company: "Nova Building Maintenance", phone: "+1 555 100 1001", email: "contact@novabuildingmaintenance.com", status: "New" },
+  { id: 2, name: "Sales Team", company: "Deepi Clean", phone: "+1 555 100 1002", email: "info@deepiclean.com", status: "New" },
+  { id: 3, name: "Management", company: "Seagull Cleaning Services", phone: "+1 555 100 1003", email: "hello@seagullcleaningservices.com", status: "New" },
+  { id: 4, name: "Operations Team", company: "Capital Facilities", phone: "+1 555 100 1004", email: "contact@capitalfacilities.com", status: "New" },
+  { id: 5, name: "Sales Team", company: "Roli Cleaners", phone: "+1 555 100 1005", email: "info@rolicleaners.com", status: "New" },
+  { id: 6, name: "Reception", company: "A1 Sunshine Cleaning", phone: "+1 555 100 1006", email: "contact@a1sunshinecleaning.com", status: "New" },
+  { id: 7, name: "Management", company: "Multycerv Janitorial Services", phone: "+1 555 100 1007", email: "hello@multycervjanitorialservices.com", status: "New" },
+  { id: 8, name: "Office Team", company: "Jaguar Cleaning Services Corp.", phone: "+1 555 100 1008", email: "contact@jaguarcleaningservices.com", status: "New" },
+  { id: 9, name: "Admin", company: "Premium Maintenance Services Ltd.", phone: "+1 555 100 1009", email: "info@premiummaintenanceservices.com", status: "New" },
+  { id: 10, name: "Support", company: "Dailycleans Commercial & Residential", phone: "+1 555 100 1010", email: "contact@dailycleans.com", status: "New" },
+  { id: 11, name: "Reception", company: "Herewego", phone: "+1 555 100 1011", email: "hello@herewego.com", status: "New" },
+  { id: 12, name: "Management", company: "Boston Cleaning Co., Inc.", phone: "+1 555 100 1012", email: "contact@bostoncleaningco.com", status: "New" },
+  { id: 13, name: "Sales Team", company: "Shining Diamond by LS Cleaning Services", phone: "+1 555 100 1013", email: "info@shiningdiamondls.com", status: "New" },
+  { id: 14, name: "Operations", company: "I & G Cleaning Services", phone: "+1 555 100 1014", email: "contact@igcleaningservices.com", status: "New" },
+  { id: 15, name: "Admin", company: "Optimal Cleaning Services Ltd.", phone: "+1 555 100 1015", email: "hello@optimalcleaningservices.com", status: "New" },
+  { id: 16, name: "Support Team", company: "Tetra Maintenance", phone: "+1 555 100 1016", email: "contact@tetramaintenance.com", status: "New" },
+];

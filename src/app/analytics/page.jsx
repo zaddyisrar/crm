@@ -2,8 +2,10 @@
 
 import { useMemo, useState } from "react";
 import {
+  BarChart3,
   PhoneCall,
   CalendarCheck,
+  Target,
   TrendingUp,
   Users,
   Flame,
@@ -24,6 +26,8 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  BarChart,
+  Bar,
 } from "recharts";
 
 import AdminShell from "@/components/admin/AdminShell";
@@ -51,10 +55,24 @@ const weeklyPerformance = [
   { day: "Sat", calls: 203, leads: 61, meetings: 14 },
 ];
 
+const campaignData = [
+  { campaign: "Cleaning", conversion: 34 },
+  { campaign: "Roofing", conversion: 26 },
+  { campaign: "Solar", conversion: 21 },
+  { campaign: "Real Estate", conversion: 18 },
+  { campaign: "SaaS", conversion: 29 },
+];
+
 const topAgents = [
   { name: "Sameer", id: "LR-SAMEER", calls: 127, interested: 38, meetings: 12, rate: "28%" },
   { name: "Israr", id: "LR-ISRAR", calls: 118, interested: 34, meetings: 10, rate: "25%" },
   { name: "Ammar", id: "LR-AMMAR", calls: 104, interested: 29, meetings: 8, rate: "22%" },
+];
+
+const campaignSummary = [
+  { name: "Commercial Cleaning", leads: 120, calls: 84, interested: 31, meetings: 11, conversion: "34%" },
+  { name: "Roofing", leads: 84, calls: 59, interested: 18, meetings: 7, conversion: "26%" },
+  { name: "Solar", leads: 64, calls: 41, interested: 12, meetings: 5, conversion: "21%" },
 ];
 
 const insights = [
@@ -129,7 +147,7 @@ export default function AnalyticsPage() {
   return (
     <AdminShell
       title="Analytics"
-      subtitle="Salary analytics, team productivity, and admin insights."
+      subtitle="Performance reports, salary analytics, campaign insights, and team productivity."
     >
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <AdminStat label="Total Calls" value="1,004" note="Demo data" icon={PhoneCall} tone="text-cyan-300" />
@@ -262,6 +280,36 @@ export default function AnalyticsPage() {
 
         <section className="rounded-2xl border border-white/10 bg-[#071018]/80 p-5 backdrop-blur-xl">
           <div className="mb-5 flex items-center gap-2">
+            <BarChart3 size={18} className="text-cyan-300" />
+            <h3 className="text-lg font-semibold text-white">
+              Campaign Conversion
+            </h3>
+          </div>
+
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={campaignData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(34, 211, 238, 0.08)" />
+                <XAxis dataKey="campaign" stroke="#94a3b8" />
+                <YAxis stroke="#94a3b8" />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "rgba(3, 6, 11, 0.96)",
+                    border: "1px solid rgba(34, 211, 238, 0.25)",
+                    borderRadius: "12px",
+                    color: "#e2e8f0",
+                  }}
+                />
+                <Bar dataKey="conversion" fill="#22d3ee" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      </div>
+
+      <div className="mt-5 grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+        <section className="rounded-2xl border border-white/10 bg-[#071018]/80 p-5 backdrop-blur-xl">
+          <div className="mb-5 flex items-center gap-2">
             <Users size={18} className="text-cyan-300" />
             <h3 className="text-lg font-semibold text-white">Top Agents</h3>
           </div>
@@ -289,6 +337,43 @@ export default function AnalyticsPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-white/10 bg-[#071018]/80 p-5 backdrop-blur-xl">
+          <div className="mb-5 flex items-center gap-2">
+            <Target size={18} className="text-cyan-300" />
+            <h3 className="text-lg font-semibold text-white">
+              Campaign Summary
+            </h3>
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-white/10">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="bg-white/[0.03] text-slate-400">
+                <tr>
+                  <th className="px-4 py-4 font-medium">Campaign</th>
+                  <th className="px-4 py-4 font-medium">Leads</th>
+                  <th className="px-4 py-4 font-medium">Calls</th>
+                  <th className="px-4 py-4 font-medium">Interested</th>
+                  <th className="px-4 py-4 font-medium">Meetings</th>
+                  <th className="px-4 py-4 font-medium">Rate</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-white/10">
+                {campaignSummary.map((campaign) => (
+                  <tr key={campaign.name} className="text-slate-300">
+                    <td className="px-4 py-4 text-white">{campaign.name}</td>
+                    <td className="px-4 py-4">{campaign.leads}</td>
+                    <td className="px-4 py-4">{campaign.calls}</td>
+                    <td className="px-4 py-4 text-yellow-300">{campaign.interested}</td>
+                    <td className="px-4 py-4 text-green-300">{campaign.meetings}</td>
+                    <td className="px-4 py-4 text-cyan-300">{campaign.conversion}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
       </div>

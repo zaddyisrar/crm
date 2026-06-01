@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   LogOut,
   Users,
+  BarChart3,
 } from "lucide-react";
 
 const navItems = [
@@ -22,6 +23,11 @@ const navItems = [
     href: "/admin/attendance",
     icon: ClipboardCheck,
   },
+  {
+  name: "Analytics",
+  href: "/admin/analytics",
+  icon: BarChart3,
+},
   {
     name: "Leads",
     href: "/admin/leads",
