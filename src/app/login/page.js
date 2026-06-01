@@ -1,6 +1,6 @@
 "use client";
 
-import { users } from "@/data/users";
+import { users } from "@/data/agents";
 import { sheetsPost } from "@/lib/sheetsApi";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -23,16 +23,17 @@ export default function LoginPage() {
     setError("");
 
     const cleanUserId = userId.trim().toUpperCase();
+    const cleanPassword = password.trim();
 
     const foundUser = users.find(
-      (user) =>
-        user.id.toUpperCase() === cleanUserId &&
-        user.password === password.trim() &&
-        user.role === role
+      (item) =>
+        item.id.toUpperCase() === cleanUserId &&
+        item.password === cleanPassword &&
+        item.role === role
     );
 
     if (!foundUser) {
-      setError("Invalid ID or Password");
+      setError("Invalid ID, password, or role.");
       return;
     }
 
@@ -87,11 +88,16 @@ export default function LoginPage() {
     localStorage.setItem("crmUserName", foundUser.name);
 
     if (foundUser.role === "admin") {
-      router.replace("/admin");
+      router.push("/admin");
       return;
     }
 
-    router.replace("/dashboard");
+    if (foundUser.role === "manager") {
+      router.push("/manager");
+      return;
+    }
+
+    router.push("/dashboard");
   }
 
   return (
@@ -124,14 +130,14 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <div className="mt-5 grid grid-cols-2 rounded-2xl border border-cyan-300/15 bg-black/30 p-1">
+          <div className="mt-5 grid grid-cols-3 rounded-2xl border border-cyan-300/15 bg-black/30 p-1">
             <button
               type="button"
               onClick={() => {
                 setRole("agent");
                 setError("");
               }}
-              className={`rounded-xl py-3 text-xs ${
+              className={`rounded-xl py-3 text-[11px] font-bold ${
                 role === "agent"
                   ? "bg-cyan-400/15 text-cyan-300"
                   : "text-slate-500"
@@ -143,10 +149,25 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => {
+                setRole("manager");
+                setError("");
+              }}
+              className={`rounded-xl py-3 text-[11px] font-bold ${
+                role === "manager"
+                  ? "bg-cyan-400/15 text-cyan-300"
+                  : "text-slate-500"
+              }`}
+            >
+              MANAGER
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
                 setRole("admin");
                 setError("");
               }}
-              className={`rounded-xl py-3 text-xs ${
+              className={`rounded-xl py-3 text-[11px] font-bold ${
                 role === "admin"
                   ? "bg-cyan-400/15 text-cyan-300"
                   : "text-slate-500"
@@ -166,7 +187,13 @@ export default function LoginPage() {
             <input
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
-              placeholder={role === "admin" ? "Admin ID" : "Agent ID"}
+              placeholder={
+                role === "admin"
+                  ? "Admin ID"
+                  : role === "manager"
+                  ? "Manager ID"
+                  : "Agent ID"
+              }
               className="w-full rounded-xl border border-cyan-300/15 bg-black/20 px-4 py-3 outline-none"
             />
 

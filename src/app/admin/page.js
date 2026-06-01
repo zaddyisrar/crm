@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 import AdminShell from "@/components/admin/AdminShell";
-import { users } from "@/data/users";
+import { users } from "@/data/agents";
 import { sheetsGet } from "@/lib/sheetsApi";
 
 function getTodayKey() {
