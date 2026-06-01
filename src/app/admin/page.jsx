@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Users,
-  Building2,
-  BriefcaseBusiness,
   Clock3,
   Activity,
   TrendingUp,
+  Coffee,
+  Bath,
 } from "lucide-react";
 
 import AdminShell from "@/components/admin/AdminShell";
@@ -21,10 +21,6 @@ function getTodayKey() {
 function normalizeDate(value) {
   if (!value) return "";
 
-  if (value instanceof Date) {
-    return value.toISOString().split("T")[0];
-  }
-
   const stringValue = String(value);
 
   if (stringValue.includes("T")) {
@@ -34,6 +30,10 @@ function normalizeDate(value) {
   return stringValue;
 }
 
+function normalizeStatus(value) {
+  return String(value || "Absent").trim();
+}
+
 export default function AdminPage() {
   const [adminName, setAdminName] = useState("Admin");
   const [attendanceRows, setAttendanceRows] = useState([]);
@@ -41,12 +41,9 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const name = localStorage.getItem("crmUserName");
-    const id = localStorage.getItem("crmUserId");
+  setAdminName("Admin");
 
-    setAdminName(name || id || "Admin");
-
-    async function loadSheetData() {
+  async function loadSheetData() {
       try {
         const attendanceResponse = await sheetsGet("getAttendance");
         const leadsResponse = await sheetsGet("getLeads");
@@ -63,10 +60,13 @@ export default function AdminPage() {
     }
 
     loadSheetData();
+
+    const interval = setInterval(loadSheetData, 5000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const today = getTodayKey();
-
   const agentUsers = users.filter((user) => user.role === "agent");
 
   const todayAttendance = attendanceRows.filter(
@@ -85,8 +85,16 @@ export default function AdminPage() {
     const latestRecord = records[records.length - 1];
 
     const presentToday = Boolean(latestRecord);
-    const checkedOutToday = Boolean(latestRecord?.CheckOut);
-    const activeNow = presentToday && !checkedOutToday;
+    const checkIn = latestRecord?.CheckIn || "";
+    const checkOut = latestRecord?.CheckOut || "";
+    const status = presentToday
+      ? normalizeStatus(latestRecord?.Status)
+      : "Absent";
+
+    const activeNow = status === "Active";
+    const onBreak = status === "Break";
+    const inWashroom = status === "Washroom";
+    const checkedOut = status === "Checked Out";
 
     const todayLeads = todayLeadsRows.filter(
       (lead) => String(lead.AgentID).toUpperCase() === agent.id.toUpperCase()
@@ -94,18 +102,22 @@ export default function AdminPage() {
 
     return {
       ...agent,
-      checkIn: latestRecord?.CheckIn || "",
-      checkOut: latestRecord?.CheckOut || "",
-      status: latestRecord?.Status || "Absent",
+      checkIn,
+      checkOut,
+      status,
       presentToday,
       activeNow,
+      onBreak,
+      inWashroom,
+      checkedOut,
       todayLeads,
     };
   });
 
-  const availableClients = 16;
-
   const activeAgents = agentsData.filter((x) => x.activeNow).length;
+  const breakAgents = agentsData.filter((x) => x.onBreak).length;
+  const washroomAgents = agentsData.filter((x) => x.inWashroom).length;
+  const checkedOutAgents = agentsData.filter((x) => x.checkedOut).length;
   const presentAgents = agentsData.filter((x) => x.presentToday).length;
   const totalAgents = agentsData.length;
   const todayLeads = todayLeadsRows.length;
@@ -116,44 +128,53 @@ export default function AdminPage() {
   const liveOperations = useMemo(() => {
     return agentsData
       .filter((agent) => agent.presentToday)
-      .slice(0, 5)
-      .map((agent) => ({
-        agent: agent.name,
-        action: agent.activeNow
-          ? `Checked in at ${agent.checkIn}`
-          : `Checked out at ${agent.checkOut || "-"}`,
-        status: agent.activeNow ? "Online" : "Checked out",
-      }));
+      .slice(0, 8)
+      .map((agent) => {
+        const action =
+          agent.status === "Break"
+            ? "Currently on break"
+            : agent.status === "Washroom"
+            ? "Currently in washroom"
+            : agent.status === "Checked Out"
+            ? `Checked out at ${agent.checkOut || "-"}`
+            : `Checked in at ${agent.checkIn || "-"}`;
+
+        return {
+          agent: agent.name,
+          action,
+          status: agent.status,
+        };
+      });
   }, [agentsData]);
 
   const stats = [
     {
       title: "Active Agents",
       value: loading ? "..." : activeAgents,
-      note: "Online now",
+      note: "Working now",
       icon: Users,
-      color: "text-cyan-300",
+      color: "text-emerald-300",
     },
     {
-      title: "Available Clients",
-      value: availableClients,
-      note: "Total clients",
-      icon: Building2,
-      color: "text-green-300",
-    },
-    {
-      title: "Working Clients",
-      value: loading ? "..." : activeAgents,
-      note: "Currently active",
-      icon: BriefcaseBusiness,
+      title: "On Break",
+      value: loading ? "..." : breakAgents,
+      note: "Break status",
+      icon: Coffee,
       color: "text-yellow-300",
+    },
+    {
+      title: "Washroom",
+      value: loading ? "..." : washroomAgents,
+      note: "Away temporarily",
+      icon: Bath,
+      color: "text-purple-300",
     },
     {
       title: "Attendance",
       value: loading ? "..." : `${attendanceRate}%`,
       note: loading ? "Loading..." : `${presentAgents}/${totalAgents} present`,
       icon: Clock3,
-      color: "text-purple-300",
+      color: "text-cyan-300",
     },
   ];
 
@@ -171,8 +192,16 @@ export default function AdminPage() {
       value: loading ? "..." : activeAgents,
     },
     {
-      title: "Available Clients",
-      value: availableClients,
+      title: "On Break",
+      value: loading ? "..." : breakAgents,
+    },
+    {
+      title: "Washroom",
+      value: loading ? "..." : washroomAgents,
+    },
+    {
+      title: "Checked Out",
+      value: loading ? "..." : checkedOutAgents,
     },
   ];
 
@@ -184,12 +213,12 @@ export default function AdminPage() {
         </p>
 
         <h1 className="mt-3 text-4xl font-black text-white">
-          Welcome {adminName}
-        </h1>
+  Welcome Back, Admin
+</h1>
 
         <p className="mt-2 text-sm text-slate-500">
-          Showing today&apos;s attendance and saved lead activity from Google
-          Sheets.
+          Live attendance, break, washroom, checkout, and lead activity from
+          Google Sheets.
         </p>
       </div>
 
@@ -236,7 +265,7 @@ export default function AdminPage() {
             ) : (
               liveOperations.map((x) => (
                 <div
-                  key={x.agent}
+                  key={`${x.agent}-${x.status}`}
                   className="flex items-center justify-between rounded-xl border border-white/5 bg-black/20 px-4 py-4"
                 >
                   <div>
@@ -244,7 +273,7 @@ export default function AdminPage() {
                     <p className="mt-1 text-sm text-slate-500">{x.action}</p>
                   </div>
 
-                  <span className="text-xs text-cyan-300">{x.status}</span>
+                  <StatusPill status={x.status} />
                 </div>
               ))
             )}
@@ -271,5 +300,25 @@ export default function AdminPage() {
         </div>
       </div>
     </AdminShell>
+  );
+}
+
+function StatusPill({ status }) {
+  const styles = {
+    Active: "border-emerald-300/20 bg-emerald-300/10 text-emerald-300",
+    Break: "border-yellow-300/20 bg-yellow-300/10 text-yellow-300",
+    Washroom: "border-purple-300/20 bg-purple-300/10 text-purple-300",
+    "Checked Out": "border-orange-300/20 bg-orange-300/10 text-orange-300",
+    Absent: "border-red-300/20 bg-red-300/10 text-red-300",
+  };
+
+  return (
+    <span
+      className={`rounded-lg border px-3 py-1 text-xs ${
+        styles[status] || styles.Absent
+      }`}
+    >
+      {status}
+    </span>
   );
 }

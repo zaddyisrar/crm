@@ -12,6 +12,9 @@ import {
   X,
   Search,
   CheckCircle2,
+  Coffee,
+  Bath,
+  BriefcaseBusiness,
 } from "lucide-react";
 
 import PageShell from "@/components/crm/PageShell";
@@ -91,6 +94,7 @@ export default function DashboardPage() {
   const [agentName, setAgentName] = useState("Agent");
   const [checkInTime, setCheckInTime] = useState("");
   const [workHours, setWorkHours] = useState("0h 0m");
+  const [currentStatus, setCurrentStatus] = useState("Active");
 
   const [selectedClient, setSelectedClient] = useState(clientOptions[0]);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
@@ -115,6 +119,20 @@ export default function DashboardPage() {
     setAgentId(userId);
     setAgentName(userName || formatAgentName(userId));
 
+    const savedStatus =
+      localStorage.getItem(`crmCurrentStatus:${userId}`) || "Active";
+
+    setCurrentStatus(savedStatus);
+
+    function syncStatusFromStorage() {
+      const nextStatus =
+        localStorage.getItem(`crmCurrentStatus:${userId}`) || "Active";
+
+      setCurrentStatus(nextStatus);
+    }
+
+    window.addEventListener("crm-status-change", syncStatusFromStorage);
+
     const savedCheckIn = localStorage.getItem(`crmCheckInTime:${userId}`);
 
     if (savedCheckIn) {
@@ -131,6 +149,10 @@ export default function DashboardPage() {
         setLeads([]);
       }
     }
+
+    return () => {
+      window.removeEventListener("crm-status-change", syncStatusFromStorage);
+    };
   }, []);
 
   useEffect(() => {
@@ -165,6 +187,15 @@ export default function DashboardPage() {
   const recentActivity = useMemo(
     () => [
       {
+        time: "Now",
+        text:
+          currentStatus === "Break"
+            ? `${agentName} is on break`
+            : currentStatus === "Washroom"
+            ? `${agentName} is in washroom`
+            : `${agentName} is active`,
+      },
+      {
         time: checkInTime || "Today",
         text: `${agentName} checked in`,
       },
@@ -177,7 +208,7 @@ export default function DashboardPage() {
         text: `Added lead: ${lead.company}`,
       })),
     ],
-    [agentName, checkInTime, leads, selectedClient]
+    [agentName, checkInTime, leads, selectedClient, currentStatus]
   );
 
   function handleChange(e) {
@@ -244,6 +275,10 @@ export default function DashboardPage() {
 
   return (
     <PageShell title={`Hello, Good Morning ${agentName}`} subtitle="">
+      <div className="mb-2.5">
+        <StatusBadge status={currentStatus} />
+      </div>
+
       <div className="mb-2.5 flex flex-col gap-2 rounded-2xl border border-white/10 bg-[#071018]/80 px-3 py-2.5 backdrop-blur-xl xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-300/70">
@@ -266,7 +301,27 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      <div className="grid gap-2.5 md:grid-cols-3">
+      <div className="grid gap-2.5 md:grid-cols-4">
+        <DashboardCard
+          label="Current Status"
+          value={currentStatus}
+          note="Live agent status"
+          icon={
+            currentStatus === "Break"
+              ? Coffee
+              : currentStatus === "Washroom"
+              ? Bath
+              : BriefcaseBusiness
+          }
+          tone={
+            currentStatus === "Break"
+              ? "text-yellow-300"
+              : currentStatus === "Washroom"
+              ? "text-purple-300"
+              : "text-emerald-300"
+          }
+        />
+
         <DashboardCard
           label="Current Client"
           value={selectedClient.company}
@@ -366,9 +421,7 @@ export default function DashboardPage() {
               <h2 className="text-sm font-semibold text-white">Recent Activity</h2>
             </div>
 
-            <span className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-[10px] text-emerald-300">
-              Online
-            </span>
+            <StatusTiny status={currentStatus} />
           </div>
 
           <div className="space-y-1.5">
@@ -479,6 +532,60 @@ export default function DashboardPage() {
         </div>
       )}
     </PageShell>
+  );
+}
+
+function StatusBadge({ status }) {
+  const config = {
+    Active: {
+      text: "Active",
+      icon: BriefcaseBusiness,
+      className: "border-emerald-300/20 bg-emerald-300/10 text-emerald-300",
+    },
+    Break: {
+      text: "On Break",
+      icon: Coffee,
+      className: "border-yellow-300/20 bg-yellow-300/10 text-yellow-300",
+    },
+    Washroom: {
+      text: "Washroom",
+      icon: Bath,
+      className: "border-purple-300/20 bg-purple-300/10 text-purple-300",
+    },
+  };
+
+  const item = config[status] || config.Active;
+  const Icon = item.icon;
+
+  return (
+    <div
+      className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-xs font-semibold ${item.className}`}
+    >
+      <Icon size={15} />
+      Current Status: {item.text}
+    </div>
+  );
+}
+
+function StatusTiny({ status }) {
+  const config = {
+    Active: "border-emerald-400/20 bg-emerald-400/10 text-emerald-300",
+    Break: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+    Washroom: "border-purple-400/20 bg-purple-400/10 text-purple-300",
+  };
+
+  return (
+    <span
+      className={`rounded-xl border px-2 py-1 text-[10px] ${
+        config[status] || config.Active
+      }`}
+    >
+      {status === "Break"
+        ? "On Break"
+        : status === "Washroom"
+        ? "Washroom"
+        : "Online"}
+    </span>
   );
 }
 

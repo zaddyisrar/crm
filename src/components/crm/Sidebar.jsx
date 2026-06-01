@@ -3,7 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Clock3, LogOut } from "lucide-react";
+import {
+  LayoutDashboard,
+  Clock3,
+  LogOut,
+  Coffee,
+  Bath,
+  BriefcaseBusiness,
+} from "lucide-react";
 
 import { sheetsPost } from "@/lib/sheetsApi";
 
@@ -35,6 +42,28 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
 
+  async function updateAgentStatus(status) {
+    const userId = localStorage.getItem("crmUserId");
+    const role = localStorage.getItem("crmRole");
+
+    if (!userId || role !== "agent") return;
+
+    localStorage.setItem(`crmCurrentStatus:${userId}`, status);
+    window.dispatchEvent(new Event("crm-status-change"));
+
+    try {
+      await sheetsPost({
+        action: "updateStatus",
+        agentId: userId,
+        status,
+      });
+
+      console.log(`Status updated: ${status}`);
+    } catch (error) {
+      console.error("Google Sheets status update failed:", error);
+    }
+  }
+
   async function handleLogout() {
     const userId = localStorage.getItem("crmUserId");
     const role = localStorage.getItem("crmRole");
@@ -45,6 +74,7 @@ export default function Sidebar() {
 
       localStorage.setItem(`crmCheckOutTime:${userId}`, checkOutTime);
       localStorage.setItem(`crmCheckedOutDate:${userId}`, today);
+      localStorage.setItem(`crmCurrentStatus:${userId}`, "Checked Out");
 
       try {
         await sheetsPost({
@@ -103,7 +133,31 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="mt-3 border-t border-cyan-400/10 pt-3">
+      <div className="space-y-2 border-t border-cyan-400/10 pt-3">
+        <button
+          onClick={() => updateAgentStatus("Break")}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-yellow-400/20 bg-yellow-400/10 px-3 py-2.5 text-xs font-medium text-yellow-200 transition hover:bg-yellow-400/15"
+        >
+          <Coffee size={15} />
+          Break
+        </button>
+
+        <button
+          onClick={() => updateAgentStatus("Washroom")}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-purple-400/20 bg-purple-400/10 px-3 py-2.5 text-xs font-medium text-purple-200 transition hover:bg-purple-400/15"
+        >
+          <Bath size={15} />
+          Washroom
+        </button>
+
+        <button
+          onClick={() => updateAgentStatus("Active")}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2.5 text-xs font-medium text-emerald-200 transition hover:bg-emerald-400/15"
+        >
+          <BriefcaseBusiness size={15} />
+          Back to Work
+        </button>
+
         <button
           onClick={handleLogout}
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-400/20 bg-red-400/10 px-3 py-3 text-xs font-medium text-red-200 transition hover:bg-red-400/15"
