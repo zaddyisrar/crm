@@ -1,6 +1,5 @@
 "use client";
 
-import { users } from "@/data/agents";
 import { sheetsPost } from "@/lib/sheetsApi";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -19,6 +18,13 @@ function getTodayKey() {
   return new Date().toISOString().split("T")[0];
 }
 
+function getTimeNow() {
+  return new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -28,6 +34,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const savedId = localStorage.getItem("crmRememberId");
@@ -46,82 +53,99 @@ export default function LoginPage() {
   async function handleLogin(e) {
     e.preventDefault();
     setError("");
+    setLoading(true);
 
     const cleanUserId = userId.trim().toUpperCase();
     const cleanPassword = password.trim();
-
-    const foundUser = users.find(
-      (item) =>
-        item.id.toUpperCase() === cleanUserId &&
-        item.password === cleanPassword &&
-        item.role === role
-    );
-
-    if (!foundUser) {
-      setError("Invalid ID, password, or role.");
-      return;
-    }
-
     const today = getTodayKey();
 
-    if (foundUser.role === "agent") {
-      const checkedOutDate = localStorage.getItem(
-        `crmCheckedOutDate:${cleanUserId}`
-      );
+    try {
+      const loginResponse = await sheetsPost({
+        action: "login",
+        agentId: cleanUserId,
+        password: cleanPassword,
+        role,
+      });
 
-      if (checkedOutDate === today) {
-        setError("You already checked out today.");
+      const foundUser = loginResponse.user;
+
+      if (!foundUser) {
+        setError("Invalid ID, password, or role.");
+        setLoading(false);
         return;
       }
 
-      const previousCheckDate = localStorage.getItem(
-        `crmCheckInDate:${cleanUserId}`
-      );
+      const finalRole = String(foundUser.role || role).toLowerCase();
+      const finalUserId = String(foundUser.agentId || cleanUserId).toUpperCase();
+      const finalUserName = foundUser.agentName || "User";
 
-      if (previousCheckDate !== today) {
-        localStorage.removeItem(`crmCheckInTime:${cleanUserId}`);
-        localStorage.removeItem(`crmCheckOutTime:${cleanUserId}`);
-      }
+      if (finalRole === "agent") {
+        const checkedOutDate = localStorage.getItem(
+          `crmCheckedOutDate:${finalUserId}`
+        );
 
-      if (!localStorage.getItem(`crmCheckInTime:${cleanUserId}`)) {
-        const checkInTime = new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
+        if (checkedOutDate === today) {
+          setError("You already logged out today.");
+          setLoading(false);
+          return;
+        }
 
-        localStorage.setItem(`crmCheckInTime:${cleanUserId}`, checkInTime);
-        localStorage.setItem(`crmCheckInDate:${cleanUserId}`, today);
+        const previousLoginDate = localStorage.getItem(
+          `crmCheckInDate:${finalUserId}`
+        );
 
-        try {
+        if (previousLoginDate !== today) {
+          localStorage.removeItem(`crmCheckInTime:${finalUserId}`);
+          localStorage.removeItem(`crmCheckOutTime:${finalUserId}`);
+          localStorage.removeItem(`crmCheckedOutDate:${finalUserId}`);
+        }
+
+        if (!localStorage.getItem(`crmCheckInTime:${finalUserId}`)) {
+          const loginTime = getTimeNow();
+
+          localStorage.setItem(`crmCheckInTime:${finalUserId}`, loginTime);
+          localStorage.setItem(`crmCheckInDate:${finalUserId}`, today);
+          localStorage.setItem(`crmCurrentStatus:${finalUserId}`, "Active");
+
           await sheetsPost({
-            action: "checkIn",
-            agentId: foundUser.id,
-            name: foundUser.name,
+            action: "attendanceLogin",
+            agentId: finalUserId,
+            agentName: finalUserName,
             date: today,
-            checkIn: checkInTime,
+            loginTime,
+            status: "Active",
           });
-        } catch (err) {
-          console.error("Google Sheets check-in failed:", err);
         }
       }
+
+      if (remember) {
+        localStorage.setItem("crmRememberId", finalUserId);
+        localStorage.setItem("crmRememberRole", finalRole);
+      } else {
+        localStorage.removeItem("crmRememberId");
+        localStorage.removeItem("crmRememberRole");
+      }
+
+      localStorage.setItem("crmRole", finalRole);
+      localStorage.setItem("crmUserId", finalUserId);
+      localStorage.setItem("crmUserName", finalUserName);
+
+      if (finalRole === "admin") {
+        router.push("/admin");
+        return;
+      }
+
+      if (finalRole === "manager") {
+        router.push("/manager");
+        return;
+      }
+
+      router.push("/dashboard");
+    } catch (err) {
+      console.error("Login failed:", err);
+      setError(err.message || "Login failed. Please try again.");
+      setLoading(false);
     }
-
-    if (remember) {
-      localStorage.setItem("crmRememberId", cleanUserId);
-      localStorage.setItem("crmRememberRole", role);
-    } else {
-      localStorage.removeItem("crmRememberId");
-      localStorage.removeItem("crmRememberRole");
-    }
-
-    localStorage.setItem("crmRole", foundUser.role);
-    localStorage.setItem("crmUserId", foundUser.id);
-    localStorage.setItem("crmUserName", foundUser.name);
-
-    if (foundUser.role === "admin") return router.push("/admin");
-    if (foundUser.role === "manager") return router.push("/manager");
-
-    router.push("/dashboard");
   }
 
   return (
@@ -302,9 +326,10 @@ export default function LoginPage() {
 
               <button
                 type="submit"
-                className="mt-6 w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-cyan-300 py-4 text-sm font-black text-black shadow-[0_0_35px_rgba(34,211,238,0.35)] transition hover:scale-[1.02] hover:shadow-[0_0_50px_rgba(34,211,238,0.5)]"
+                disabled={loading}
+                className="mt-6 w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-cyan-300 py-4 text-sm font-black text-black shadow-[0_0_35px_rgba(34,211,238,0.35)] transition hover:scale-[1.02] hover:shadow-[0_0_50px_rgba(34,211,238,0.5)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100"
               >
-                LOGIN
+                {loading ? "LOGGING IN..." : "LOGIN"}
               </button>
             </form>
           </div>

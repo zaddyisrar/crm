@@ -78,11 +78,10 @@ export default function Sidebar() {
 
       try {
         await sheetsPost({
-          action: "checkOut",
-          agentId: userId,
-          date: today,
-          checkOut: checkOutTime,
-        });
+  action: "attendanceLogout",
+  agentId: userId,
+  logoutTime: checkOutTime,
+});
 
         console.log("Check-out synced to Google Sheets");
       } catch (error) {
