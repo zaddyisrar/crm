@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 
 import AdminShell from "@/components/admin/AdminShell";
-import { users } from "@/data/agents";
 import { sheetsPost } from "@/lib/sheetsApi";
 
 function getTodayKey() {
@@ -36,6 +35,7 @@ function normalizeStatus(value) {
 }
 
 export default function AdminPage() {
+  const [agentRows, setAgentRows] = useState([]);
   const [attendanceRows, setAttendanceRows] = useState([]);
   const [leadRows, setLeadRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,16 +44,16 @@ export default function AdminPage() {
     try {
       if (showLoader) setLoading(true);
 
+      const agentsResponse = await sheetsPost({ action: "getAgents" });
       const attendanceResponse = await sheetsPost({ action: "getAttendance" });
       const leadsResponse = await sheetsPost({ action: "getLeads" });
 
-      console.log("ADMIN ATTENDANCE RESPONSE:", attendanceResponse);
-      console.log("ADMIN LEADS RESPONSE:", leadsResponse);
-
+      setAgentRows(agentsResponse.data || []);
       setAttendanceRows(attendanceResponse.data || []);
       setLeadRows(leadsResponse.data || []);
     } catch (error) {
       console.error("Admin Google Sheets read failed:", error);
+      setAgentRows([]);
       setAttendanceRows([]);
       setLeadRows([]);
     } finally {
@@ -73,8 +73,13 @@ export default function AdminPage() {
 
   const today = getTodayKey();
 
-  const agentUsers = users.filter((user) => user.role === "agent");
-  const managerUsers = users.filter((user) => user.role === "manager");
+  const agentUsers = agentRows.filter(
+    (user) => String(user.Role || "").toLowerCase() === "agent"
+  );
+
+  const managerUsers = agentRows.filter(
+    (user) => String(user.Role || "").toLowerCase() === "manager"
+  );
 
   const todayAttendance = attendanceRows.filter(
     (row) => normalizeDate(row.Date) === today
@@ -85,10 +90,10 @@ export default function AdminPage() {
   );
 
   const agentsData = agentUsers.map((agent) => {
+    const agentId = String(agent.AgentID || "").toUpperCase();
+
     const records = todayAttendance.filter(
-      (row) =>
-        String(row.AgentID || "").toUpperCase() ===
-        String(agent.id || "").toUpperCase()
+      (row) => String(row.AgentID || "").toUpperCase() === agentId
     );
 
     const latestRecord = records[records.length - 1];
@@ -107,9 +112,7 @@ export default function AdminPage() {
     const checkedOut = status === "Checked Out";
 
     const todayLeads = todayLeadsRows.filter(
-      (lead) =>
-        String(lead.AgentID || "").toUpperCase() ===
-        String(agent.id || "").toUpperCase()
+      (lead) => String(lead.AgentID || "").toUpperCase() === agentId
     );
 
     return {
@@ -154,7 +157,7 @@ export default function AdminPage() {
             : `Login at ${agent.loginAt || "-"}`;
 
         return {
-          agent: agent.name,
+          agent: agent.AgentName || agent.AgentID || "Agent",
           action,
           status: agent.status,
         };

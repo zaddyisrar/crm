@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 
 import AdminShell from "@/components/admin/AdminShell";
-import { users } from "@/data/agents";
 import { sheetsPost } from "@/lib/sheetsApi";
 
 function getTodayKey() {
@@ -44,11 +43,11 @@ function normalizeDate(value) {
     return stringValue.split("T")[0];
   }
 
-  return stringValue;
+  return stringValue.trim();
 }
 
-function normalizeStatus(value, checkOut) {
-  if (checkOut && checkOut !== "-") return "Checked Out";
+function normalizeStatus(value, logoutTime) {
+  if (logoutTime && logoutTime !== "-") return "Checked Out";
 
   const status = String(value || "Active").trim();
 
@@ -59,59 +58,73 @@ function normalizeStatus(value, checkOut) {
 
 export default function AttendancePage() {
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
+  const [agentRows, setAgentRows] = useState([]);
+  const [attendanceRows, setAttendanceRows] = useState([]);
   const [records, setRecords] = useState([]);
-  const [allRows, setAllRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  async function loadAttendance() {
+  async function loadAttendance(showLoader = false) {
     try {
-      setLoading(true);
+      if (showLoader) setLoading(true);
 
-      const response = await sheetsPost({ action: "getAttendance" });
-      const sheetRows = response.data || [];
+      const attendanceResponse = await sheetsPost({
+        action: "getAttendance",
+      });
 
-      setAllRows(sheetRows);
+      const agentsResponse = await sheetsPost({
+        action: "getAgents",
+      });
+
+      setAttendanceRows(attendanceResponse.data || []);
+      setAgentRows(agentsResponse.data || []);
     } catch (error) {
       console.error("Attendance sheet read failed:", error);
-      setAllRows([]);
+      setAttendanceRows([]);
+      setAgentRows([]);
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadAttendance();
+    loadAttendance(true);
 
-    const interval = setInterval(loadAttendance, 5000);
+    const interval = setInterval(() => {
+      loadAttendance(false);
+    }, 15000);
 
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    const selectedRows = allRows.filter(
+    const selectedRows = attendanceRows.filter(
       (row) => normalizeDate(row.Date) === selectedDate
     );
 
-    const agentRecords = users
-      .filter((user) => user.role === "agent")
+    const agentRecords = agentRows
+      .filter(
+        (user) => String(user.Role || "").toLowerCase() === "agent"
+      )
       .map((agent) => {
-        const agentRows = selectedRows.filter(
-          (row) =>
-            String(row.AgentID).toUpperCase() === agent.id.toUpperCase()
+        const agentId = String(agent.AgentID || "").toUpperCase();
+
+        const agentAttendanceRows = selectedRows.filter(
+          (row) => String(row.AgentID || "").toUpperCase() === agentId
         );
 
-        const latestRecord = agentRows[agentRows.length - 1];
+        const latestRecord =
+          agentAttendanceRows[agentAttendanceRows.length - 1];
 
-        const loginAt = latestRecord?.CheckIn || "-";
-        const logoutAt = latestRecord?.CheckOut || "-";
+        const loginAt = latestRecord?.LoginTime || "-";
+        const logoutAt = latestRecord?.LogoutTime || "-";
 
         const status = latestRecord
           ? normalizeStatus(latestRecord?.Status, logoutAt)
           : "Absent";
 
         return {
-          id: agent.id,
-          name: agent.name,
+          id: agent.AgentID || "-",
+          name: agent.AgentName || "Agent",
           loginAt,
           logoutAt,
           status,
@@ -119,7 +132,7 @@ export default function AttendancePage() {
       });
 
     setRecords(agentRecords);
-  }, [allRows, selectedDate]);
+  }, [attendanceRows, agentRows, selectedDate]);
 
   const present = records.filter((x) => x.status !== "Absent").length;
   const active = records.filter((x) => x.status === "Active").length;
@@ -128,9 +141,7 @@ export default function AttendancePage() {
   const checkedOut = records.filter((x) => x.status === "Checked Out").length;
 
   const recentRecords = useMemo(() => {
-    return records
-      .filter((item) => item.status !== "Absent")
-      .slice(0, 5);
+    return records.filter((item) => item.status !== "Absent").slice(0, 5);
   }, [records]);
 
   return (
@@ -141,9 +152,7 @@ export default function AttendancePage() {
         </p>
 
         <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <h1 className="text-4xl font-black text-white">
-            Attendance
-          </h1>
+          <h1 className="text-4xl font-black text-white">Attendance</h1>
 
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -178,11 +187,36 @@ export default function AttendancePage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <Stat title="Present" value={loading ? "..." : present} icon={UserCheck} tone="emerald" />
-        <Stat title="Active Now" value={loading ? "..." : active} icon={Clock3} tone="cyan" />
-        <Stat title="On Break" value={loading ? "..." : onBreak} icon={Coffee} tone="yellow" />
-        <Stat title="Washroom" value={loading ? "..." : washroom} icon={Bath} tone="purple" />
-        <Stat title="Checked Out" value={loading ? "..." : checkedOut} icon={LogOut} tone="orange" />
+        <Stat
+          title="Present"
+          value={loading ? "..." : present}
+          icon={UserCheck}
+          tone="emerald"
+        />
+        <Stat
+          title="Active Now"
+          value={loading ? "..." : active}
+          icon={Clock3}
+          tone="cyan"
+        />
+        <Stat
+          title="On Break"
+          value={loading ? "..." : onBreak}
+          icon={Coffee}
+          tone="yellow"
+        />
+        <Stat
+          title="Washroom"
+          value={loading ? "..." : washroom}
+          icon={Bath}
+          tone="purple"
+        />
+        <Stat
+          title="Checked Out"
+          value={loading ? "..." : checkedOut}
+          icon={LogOut}
+          tone="orange"
+        />
       </div>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.5fr_0.8fr]">
@@ -212,6 +246,15 @@ export default function AttendancePage() {
                     className="px-5 py-8 text-center text-slate-500"
                   >
                     Loading attendance records...
+                  </td>
+                </tr>
+              ) : records.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan="5"
+                    className="px-5 py-8 text-center text-slate-500"
+                  >
+                    No agents found.
                   </td>
                 </tr>
               ) : (
