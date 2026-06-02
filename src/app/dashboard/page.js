@@ -223,17 +223,22 @@ export default function DashboardPage() {
 
     try {
       await sheetsPost({
-        action: "addLead",
-        agentId: newLead.agentId,
-        name: newLead.name,
-        company: newLead.company,
-        phone: newLead.phone,
-        email: newLead.email,
-        address: newLead.address,
-        note: newLead.note,
-        date: newLead.date,
-        time: newLead.time,
-      });
+  action: "addLead",
+
+  date: newLead.date,
+  time: newLead.time,
+
+  agentId: agentId,
+  agentName: agentName,
+
+  leadName: newLead.name,
+
+  company: newLead.company,
+  phone: newLead.phone,
+  email: newLead.email,
+  address: newLead.address,
+  note: newLead.note,
+});
 
       console.log("Lead synced to Google Sheets");
     } catch (err) {

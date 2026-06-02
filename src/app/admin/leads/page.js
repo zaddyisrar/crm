@@ -11,10 +11,11 @@ import {
   MapPin,
   FileText,
   CheckCircle2,
+  RefreshCcw,
 } from "lucide-react";
 
 import AdminShell from "@/components/admin/AdminShell";
-import { sheetsGet } from "@/lib/sheetsApi";
+import { sheetsPost } from "@/lib/sheetsApi";
 
 function getTodayKey() {
   return new Date().toISOString().split("T")[0];
@@ -32,10 +33,6 @@ function normalizeDate(value) {
   return stringValue;
 }
 
-function getLeadKey(lead, index) {
-  return `${lead.AgentID || "agent"}-${lead.Phone || "phone"}-${index}`;
-}
-
 function StatusBadge({ status }) {
   const styles = {
     Pending: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
@@ -49,93 +46,67 @@ function StatusBadge({ status }) {
         styles[status] || styles.Pending
       }`}
     >
-      {status}
+      {status || "Pending"}
     </span>
   );
 }
 
 export default function AdminLeadsPage() {
   const [leads, setLeads] = useState([]);
-  const [leadStatuses, setLeadStatuses] = useState({});
-  const [approvedBy, setApprovedBy] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function loadLeads() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await sheetsPost({ action: "getLeads" });
+      setLeads(response.data || []);
+    } catch (err) {
+      console.error("Admin leads sheet read failed:", err);
+      setError(err.message || "Failed to load leads from Google Sheets");
+      setLeads([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function loadLeads() {
-      try {
-        const response = await sheetsGet("getLeads");
-        const sheetLeads = response.data || [];
-
-        setLeads(sheetLeads);
-
-        const initialStatuses = {};
-        const initialApprovedBy = {};
-
-        sheetLeads.forEach((lead, index) => {
-          const key = getLeadKey(lead, index);
-
-          initialStatuses[key] = lead.ApprovalStatus || "Pending";
-          initialApprovedBy[key] = lead.ApprovedBy || "-";
-        });
-
-        setLeadStatuses(initialStatuses);
-        setApprovedBy(initialApprovedBy);
-      } catch (error) {
-        console.error("Admin leads sheet read failed:", error);
-        setLeads([]);
-      } finally {
-        setLoading(false);
-      }
-    }
-
     loadLeads();
   }, []);
-
-  function updateLeadStatus(leadKey, status) {
-    setLeadStatuses((prev) => ({
-      ...prev,
-      [leadKey]: status,
-    }));
-
-    setApprovedBy((prev) => ({
-      ...prev,
-      [leadKey]: status === "Approved" ? "Manager" : "-",
-    }));
-  }
 
   const today = getTodayKey();
 
   const filteredLeads = useMemo(() => {
     const search = searchTerm.toLowerCase();
 
-    return leads.filter((lead, index) => {
-      const leadKey = getLeadKey(lead, index);
-      const status = leadStatuses[leadKey] || "Pending";
-      const approvedPerson = approvedBy[leadKey] || "-";
-
+    return leads.filter((lead) => {
       return (
         String(lead.AgentID || "").toLowerCase().includes(search) ||
-        String(lead.Name || "").toLowerCase().includes(search) ||
+        String(lead.AgentName || "").toLowerCase().includes(search) ||
+        String(lead.LeadName || "").toLowerCase().includes(search) ||
         String(lead.Company || "").toLowerCase().includes(search) ||
         String(lead.Phone || "").toLowerCase().includes(search) ||
         String(lead.Email || "").toLowerCase().includes(search) ||
         String(lead.Address || "").toLowerCase().includes(search) ||
         String(lead.Note || "").toLowerCase().includes(search) ||
-        String(status || "").toLowerCase().includes(search) ||
-        String(approvedPerson || "").toLowerCase().includes(search)
+        String(lead.ApprovalStatus || "").toLowerCase().includes(search) ||
+        String(lead.ApprovedBy || "").toLowerCase().includes(search) ||
+        String(lead.ApprovedAt || "").toLowerCase().includes(search)
       );
     });
-  }, [leads, searchTerm, leadStatuses, approvedBy]);
+  }, [leads, searchTerm]);
 
   const todayLeads = leads.filter((lead) => normalizeDate(lead.Date) === today);
 
-  const approvedLeads = Object.values(leadStatuses).filter(
-    (status) => status === "Approved"
+  const approvedLeads = leads.filter(
+    (lead) => String(lead.ApprovalStatus || "") === "Approved"
   ).length;
 
-  const pendingLeads = Object.values(leadStatuses).filter(
-    (status) => status === "Pending"
+  const pendingLeads = leads.filter(
+    (lead) => String(lead.ApprovalStatus || "") === "Pending"
   ).length;
 
   const stats = [
@@ -172,12 +143,31 @@ export default function AdminLeadsPage() {
   return (
     <AdminShell>
       <div className="mb-5 rounded-[1.6rem] border border-cyan-300/10 bg-white/[0.03] px-8 py-6">
-        <p className="text-[11px] uppercase tracking-[0.4em] text-cyan-300">
-          ADMIN LEADS CENTER
-        </p>
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.4em] text-cyan-300">
+              ADMIN LEADS CENTER
+            </p>
 
-        <h1 className="mt-3 text-4xl font-black text-white">Leads</h1>
+            <h1 className="mt-3 text-4xl font-black text-white">Leads</h1>
+          </div>
+
+          <button
+            onClick={loadLeads}
+            disabled={loading}
+            className="flex items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-xs font-bold text-cyan-200 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCcw size={15} className={loading ? "animate-spin" : ""} />
+            Refresh
+          </button>
+        </div>
       </div>
+
+      {error && (
+        <div className="mb-5 rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-300">
+          {error}
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-4">
         {stats.map((card) => {
@@ -208,7 +198,7 @@ export default function AdminLeadsPage() {
           <div>
             <h2 className="text-lg font-bold text-white">All Leads</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Review all submitted agent leads.
+              Read-only view of all submitted agent leads from Google Sheets.
             </p>
           </div>
 
@@ -229,10 +219,11 @@ export default function AdminLeadsPage() {
         </div>
 
         <div className="overflow-x-auto rounded-2xl border border-white/10">
-          <table className="w-full min-w-[1480px] text-left text-sm">
+          <table className="w-full min-w-[1600px] text-left text-sm">
             <thead className="bg-white/[0.03] text-slate-400">
               <tr>
                 <th className="px-4 py-4 font-medium">Agent ID</th>
+                <th className="px-4 py-4 font-medium">Agent Name</th>
                 <th className="px-4 py-4 font-medium">Lead</th>
                 <th className="px-4 py-4 font-medium">Contact</th>
                 <th className="px-4 py-4 font-medium">Address</th>
@@ -241,7 +232,7 @@ export default function AdminLeadsPage() {
                 <th className="px-4 py-4 font-medium">Time</th>
                 <th className="px-4 py-4 font-medium">Status</th>
                 <th className="px-4 py-4 font-medium">Approved By</th>
-                <th className="px-4 py-4 font-medium">Action</th>
+                <th className="px-4 py-4 font-medium">Approved At</th>
               </tr>
             </thead>
 
@@ -249,7 +240,7 @@ export default function AdminLeadsPage() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan="10"
+                    colSpan="11"
                     className="px-4 py-12 text-center text-sm text-slate-500"
                   >
                     Loading leads from Google Sheets...
@@ -258,111 +249,93 @@ export default function AdminLeadsPage() {
               ) : filteredLeads.length === 0 ? (
                 <tr>
                   <td
-                    colSpan="10"
+                    colSpan="11"
                     className="px-4 py-12 text-center text-sm text-slate-500"
                   >
                     No leads found.
                   </td>
                 </tr>
               ) : (
-                filteredLeads.map((lead, index) => {
-                  const leadKey = getLeadKey(lead, index);
-                  const status = leadStatuses[leadKey] || "Pending";
-                  const approvedPerson = approvedBy[leadKey] || "-";
+                filteredLeads.map((lead, index) => (
+                  <tr
+                    key={`${lead.AgentID || "agent"}-${lead.Phone || "phone"}-${
+                      lead.Date || "date"
+                    }-${lead.Time || "time"}-${index}`}
+                    className="text-slate-300 transition hover:bg-white/[0.02]"
+                  >
+                    <td className="px-4 py-4 text-cyan-300">
+                      {lead.AgentID || "-"}
+                    </td>
 
-                  return (
-                    <tr
-                      key={leadKey}
-                      className="text-slate-300 transition hover:bg-white/[0.02]"
-                    >
-                      <td className="px-4 py-4 text-cyan-300">
-                        {lead.AgentID || "-"}
-                      </td>
+                    <td className="px-4 py-4 font-medium text-white">
+                      {lead.AgentName || "-"}
+                    </td>
 
-                      <td className="px-4 py-4">
-                        <p className="font-medium text-white">
-                          {lead.Name || "-"}
+                    <td className="px-4 py-4">
+                      <p className="font-medium text-white">
+                        {lead.LeadName || "-"}
+                      </p>
+                      <p className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+                        <Building2 size={13} />
+                        {lead.Company || "-"}
+                      </p>
+                    </td>
+
+                    <td className="px-4 py-4">
+                      <div className="space-y-1">
+                        <p className="flex items-center gap-2 text-xs text-slate-300">
+                          <PhoneCall size={13} className="text-cyan-300" />
+                          {lead.Phone || "-"}
                         </p>
-                        <p className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-                          <Building2 size={13} />
-                          {lead.Company || "-"}
+
+                        <p className="flex items-center gap-2 text-xs text-slate-500">
+                          <Mail size={13} />
+                          {lead.Email || "-"}
                         </p>
-                      </td>
+                      </div>
+                    </td>
 
-                      <td className="px-4 py-4">
-                        <div className="space-y-1">
-                          <p className="flex items-center gap-2 text-xs text-slate-300">
-                            <PhoneCall size={13} className="text-cyan-300" />
-                            {lead.Phone || "-"}
-                          </p>
+                    <td className="px-4 py-4">
+                      <p className="flex items-center gap-2 text-xs text-slate-400">
+                        <MapPin size={13} className="text-cyan-300" />
+                        {lead.Address || "-"}
+                      </p>
+                    </td>
 
-                          <p className="flex items-center gap-2 text-xs text-slate-500">
-                            <Mail size={13} />
-                            {lead.Email || "-"}
-                          </p>
-                        </div>
-                      </td>
+                    <td className="max-w-[220px] px-4 py-4">
+                      <p className="flex items-center gap-2 truncate text-xs text-slate-400">
+                        <FileText size={13} className="text-cyan-300" />
+                        {lead.Note || "-"}
+                      </p>
+                    </td>
 
-                      <td className="px-4 py-4">
-                        <p className="flex items-center gap-2 text-xs text-slate-400">
-                          <MapPin size={13} className="text-cyan-300" />
-                          {lead.Address || "-"}
-                        </p>
-                      </td>
+                    <td className="px-4 py-4 text-slate-400">
+                      {normalizeDate(lead.Date) || "-"}
+                    </td>
 
-                      <td className="max-w-[220px] px-4 py-4">
-                        <p className="flex items-center gap-2 truncate text-xs text-slate-400">
-                          <FileText size={13} className="text-cyan-300" />
-                          {lead.Note || "-"}
-                        </p>
-                      </td>
+                    <td className="px-4 py-4 text-slate-400">
+                      {lead.Time || "-"}
+                    </td>
 
-                      <td className="px-4 py-4 text-slate-400">
-                        {normalizeDate(lead.Date) || "-"}
-                      </td>
+                    <td className="px-4 py-4">
+                      <StatusBadge status={lead.ApprovalStatus || "Pending"} />
+                    </td>
 
-                      <td className="px-4 py-4 text-slate-400">
-                        {lead.Time || "-"}
-                      </td>
+                    <td className="px-4 py-4">
+                      {lead.ApprovedBy && lead.ApprovedBy !== "-" ? (
+                        <span className="font-medium text-emerald-300">
+                          {lead.ApprovedBy}
+                        </span>
+                      ) : (
+                        <span className="text-slate-500">-</span>
+                      )}
+                    </td>
 
-                      <td className="px-4 py-4">
-                        <StatusBadge status={status} />
-                      </td>
-
-                      <td className="px-4 py-4">
-                        {approvedPerson !== "-" ? (
-                          <span className="font-medium text-emerald-300">
-                            {approvedPerson}
-                          </span>
-                        ) : (
-                          <span className="text-slate-500">-</span>
-                        )}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() =>
-                              updateLeadStatus(leadKey, "Approved")
-                            }
-                            className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-400/15"
-                          >
-                            Approve
-                          </button>
-
-                          <button
-                            onClick={() =>
-                              updateLeadStatus(leadKey, "Rejected")
-                            }
-                            className="rounded-lg border border-red-400/20 bg-red-400/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-400/15"
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
+                    <td className="px-4 py-4 text-slate-400">
+                      {lead.ApprovedAt || "-"}
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>

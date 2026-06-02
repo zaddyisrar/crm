@@ -14,7 +14,7 @@ import {
 
 import AdminShell from "@/components/admin/AdminShell";
 import { users } from "@/data/agents";
-import { sheetsGet } from "@/lib/sheetsApi";
+import { sheetsPost } from "@/lib/sheetsApi";
 
 function getTodayKey() {
   return new Date().toISOString().split("T")[0];
@@ -67,7 +67,7 @@ export default function AttendancePage() {
     try {
       setLoading(true);
 
-      const response = await sheetsGet("getAttendance");
+      const response = await sheetsPost({ action: "getAttendance" });
       const sheetRows = response.data || [];
 
       setAllRows(sheetRows);

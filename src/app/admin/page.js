@@ -13,7 +13,7 @@ import {
 
 import AdminShell from "@/components/admin/AdminShell";
 import { users } from "@/data/agents";
-import { sheetsGet } from "@/lib/sheetsApi";
+import { sheetsPost } from "@/lib/sheetsApi";
 
 function getTodayKey() {
   return new Date().toISOString().split("T")[0];
@@ -28,7 +28,7 @@ function normalizeDate(value) {
     return stringValue.split("T")[0];
   }
 
-  return stringValue;
+  return stringValue.trim();
 }
 
 function normalizeStatus(value) {
@@ -40,26 +40,33 @@ export default function AdminPage() {
   const [leadRows, setLeadRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function loadSheetData() {
-      try {
-        const attendanceResponse = await sheetsGet("getAttendance");
-        const leadsResponse = await sheetsGet("getLeads");
+  async function loadSheetData(showLoader = false) {
+    try {
+      if (showLoader) setLoading(true);
 
-        setAttendanceRows(attendanceResponse.data || []);
-        setLeadRows(leadsResponse.data || []);
-      } catch (error) {
-        console.error("Admin Google Sheets read failed:", error);
-        setAttendanceRows([]);
-        setLeadRows([]);
-      } finally {
-        setLoading(false);
-      }
+      const attendanceResponse = await sheetsPost({ action: "getAttendance" });
+      const leadsResponse = await sheetsPost({ action: "getLeads" });
+
+      console.log("ADMIN ATTENDANCE RESPONSE:", attendanceResponse);
+      console.log("ADMIN LEADS RESPONSE:", leadsResponse);
+
+      setAttendanceRows(attendanceResponse.data || []);
+      setLeadRows(leadsResponse.data || []);
+    } catch (error) {
+      console.error("Admin Google Sheets read failed:", error);
+      setAttendanceRows([]);
+      setLeadRows([]);
+    } finally {
+      if (showLoader) setLoading(false);
     }
+  }
 
-    loadSheetData();
+  useEffect(() => {
+    loadSheetData(true);
 
-    const interval = setInterval(loadSheetData, 5000);
+    const interval = setInterval(() => {
+      loadSheetData(false);
+    }, 15000);
 
     return () => clearInterval(interval);
   }, []);
@@ -79,14 +86,17 @@ export default function AdminPage() {
 
   const agentsData = agentUsers.map((agent) => {
     const records = todayAttendance.filter(
-      (row) => String(row.AgentID).toUpperCase() === agent.id.toUpperCase()
+      (row) =>
+        String(row.AgentID || "").toUpperCase() ===
+        String(agent.id || "").toUpperCase()
     );
 
     const latestRecord = records[records.length - 1];
 
     const presentToday = Boolean(latestRecord);
-    const loginAt = latestRecord?.CheckIn || "";
-    const logoutAt = latestRecord?.CheckOut || "";
+    const loginAt = latestRecord?.LoginTime || "";
+    const logoutAt = latestRecord?.LogoutTime || "";
+
     const status = presentToday
       ? normalizeStatus(latestRecord?.Status)
       : "Absent";
@@ -97,7 +107,9 @@ export default function AdminPage() {
     const checkedOut = status === "Checked Out";
 
     const todayLeads = todayLeadsRows.filter(
-      (lead) => String(lead.AgentID).toUpperCase() === agent.id.toUpperCase()
+      (lead) =>
+        String(lead.AgentID || "").toUpperCase() ===
+        String(agent.id || "").toUpperCase()
     );
 
     return {
@@ -271,9 +283,9 @@ export default function AdminPage() {
                 No agent activity today.
               </div>
             ) : (
-              liveOperations.map((x) => (
+              liveOperations.map((x, index) => (
                 <div
-                  key={`${x.agent}-${x.status}`}
+                  key={`${x.agent}-${x.status}-${index}`}
                   className="flex items-center justify-between rounded-xl border border-white/5 bg-black/20 px-4 py-4"
                 >
                   <div>

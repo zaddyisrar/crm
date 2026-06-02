@@ -1,28 +1,37 @@
 export const users = [
   {
-    id: "ADMIN-001",
-    password: "SRH2606",
+    id: "LR-ADMIN",
+    password: "AIN2606",
     name: "Syed Hamza",
     role: "admin",
-    salary: 50000,
+    salary: 0,
     status: "active",
   },
 
   {
-    id: "LR-SAMEER",
-    password: "SMR2606",
-    name: "Sameer",
-    role: "agent",
-    salary: 50000,
+    id: "LR-TAYABA",
+    password: "MGR123",
+    name: "Manager",
+    role: "manager",
+    salary: 0,
     status: "active",
   },
 
   {
-    id: "LR-ASIM",
-    password: "ASM2606",
-    name: "Asim",
+    id: "LR-SAMEEN",
+    password: "SMN2606",
+    name: "Sameen",
     role: "agent",
-    salary: 50000,
+    salary: 65000,
+    status: "active",
+  },
+
+  {
+    id: "LR-OKASHA",
+    password: "OKA2606",
+    name: "Okasha",
+    role: "agent",
+    salary: 25000,
     status: "active",
   },
 
@@ -31,14 +40,14 @@ export const users = [
     password: "LBB2606",
     name: "Labeeb",
     role: "agent",
-    salary: 50000,
+    salary: 40000,
     status: "active",
   },
 
   {
     id: "LR-EBA",
     password: "EBA2606",
-    name: "Eba",
+    name: "Hiba",
     role: "agent",
     salary: 50000,
     status: "active",
@@ -46,10 +55,10 @@ export const users = [
 
   {
     id: "LR-PASCAL",
-    password: "PSC2606",
+    password: "PCL2606",
     name: "Pascal",
     role: "agent",
-    salary: 50000,
+    salary: 60000,
     status: "active",
   },
 
@@ -58,7 +67,7 @@ export const users = [
     password: "AMR2606",
     name: "Ammar",
     role: "agent",
-    salary: 50000,
+    salary: 65000,
     status: "active",
   },
 
@@ -67,16 +76,7 @@ export const users = [
     password: "MZM2606",
     name: "Muzamil",
     role: "agent",
-    salary: 50000,
-    status: "active",
-  },
-
-  {
-    id: "LR-MUSTAFA",
-    password: "MST2606",
-    name: "Mustafa",
-    role: "agent",
-    salary: 50000,
+    salary: 60000,
     status: "active",
   },
 
@@ -88,12 +88,13 @@ export const users = [
     salary: 50000,
     status: "active",
   },
+
   {
-  id: "MANAGER-001",
-  password: "MGR2606",
-  name: "Manager",
-  role: "manager",
-  salary: 50000,
-  status: "active",
-},
+    id: "LR-SHAHZAIB",
+    password: "SHZ2606",
+    name: "Shahzaib",
+    role: "agent",
+    salary: 50000,
+    status: "active",
+  },
 ];
