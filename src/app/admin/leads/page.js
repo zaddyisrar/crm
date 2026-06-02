@@ -57,6 +57,7 @@ function StatusBadge({ status }) {
 export default function AdminLeadsPage() {
   const [leads, setLeads] = useState([]);
   const [leadStatuses, setLeadStatuses] = useState({});
+  const [approvedBy, setApprovedBy] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -69,13 +70,17 @@ export default function AdminLeadsPage() {
         setLeads(sheetLeads);
 
         const initialStatuses = {};
+        const initialApprovedBy = {};
 
         sheetLeads.forEach((lead, index) => {
           const key = getLeadKey(lead, index);
+
           initialStatuses[key] = lead.ApprovalStatus || "Pending";
+          initialApprovedBy[key] = lead.ApprovedBy || "-";
         });
 
         setLeadStatuses(initialStatuses);
+        setApprovedBy(initialApprovedBy);
       } catch (error) {
         console.error("Admin leads sheet read failed:", error);
         setLeads([]);
@@ -92,6 +97,11 @@ export default function AdminLeadsPage() {
       ...prev,
       [leadKey]: status,
     }));
+
+    setApprovedBy((prev) => ({
+      ...prev,
+      [leadKey]: status === "Approved" ? "Manager" : "-",
+    }));
   }
 
   const today = getTodayKey();
@@ -102,6 +112,7 @@ export default function AdminLeadsPage() {
     return leads.filter((lead, index) => {
       const leadKey = getLeadKey(lead, index);
       const status = leadStatuses[leadKey] || "Pending";
+      const approvedPerson = approvedBy[leadKey] || "-";
 
       return (
         String(lead.AgentID || "").toLowerCase().includes(search) ||
@@ -111,10 +122,11 @@ export default function AdminLeadsPage() {
         String(lead.Email || "").toLowerCase().includes(search) ||
         String(lead.Address || "").toLowerCase().includes(search) ||
         String(lead.Note || "").toLowerCase().includes(search) ||
-        String(status || "").toLowerCase().includes(search)
+        String(status || "").toLowerCase().includes(search) ||
+        String(approvedPerson || "").toLowerCase().includes(search)
       );
     });
-  }, [leads, searchTerm, leadStatuses]);
+  }, [leads, searchTerm, leadStatuses, approvedBy]);
 
   const todayLeads = leads.filter((lead) => normalizeDate(lead.Date) === today);
 
@@ -144,7 +156,7 @@ export default function AdminLeadsPage() {
     {
       title: "Approved Leads",
       value: loading ? "..." : approvedLeads,
-      note: "Frontend only",
+      note: "Manager approved",
       icon: CheckCircle2,
       color: "text-emerald-300",
     },
@@ -165,10 +177,6 @@ export default function AdminLeadsPage() {
         </p>
 
         <h1 className="mt-3 text-4xl font-black text-white">Leads</h1>
-
-        <p className="mt-2 text-sm text-slate-500">
-          All agent leads synced from Google Sheets. Approval is frontend-only for now.
-        </p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-4">
@@ -200,7 +208,7 @@ export default function AdminLeadsPage() {
           <div>
             <h2 className="text-lg font-bold text-white">All Leads</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Review submitted leads and mark them as approved or rejected.
+              Review all submitted agent leads.
             </p>
           </div>
 
@@ -221,7 +229,7 @@ export default function AdminLeadsPage() {
         </div>
 
         <div className="overflow-x-auto rounded-2xl border border-white/10">
-          <table className="w-full min-w-[1350px] text-left text-sm">
+          <table className="w-full min-w-[1480px] text-left text-sm">
             <thead className="bg-white/[0.03] text-slate-400">
               <tr>
                 <th className="px-4 py-4 font-medium">Agent ID</th>
@@ -232,6 +240,7 @@ export default function AdminLeadsPage() {
                 <th className="px-4 py-4 font-medium">Date</th>
                 <th className="px-4 py-4 font-medium">Time</th>
                 <th className="px-4 py-4 font-medium">Status</th>
+                <th className="px-4 py-4 font-medium">Approved By</th>
                 <th className="px-4 py-4 font-medium">Action</th>
               </tr>
             </thead>
@@ -240,7 +249,7 @@ export default function AdminLeadsPage() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan="9"
+                    colSpan="10"
                     className="px-4 py-12 text-center text-sm text-slate-500"
                   >
                     Loading leads from Google Sheets...
@@ -249,7 +258,7 @@ export default function AdminLeadsPage() {
               ) : filteredLeads.length === 0 ? (
                 <tr>
                   <td
-                    colSpan="9"
+                    colSpan="10"
                     className="px-4 py-12 text-center text-sm text-slate-500"
                   >
                     No leads found.
@@ -259,6 +268,7 @@ export default function AdminLeadsPage() {
                 filteredLeads.map((lead, index) => {
                   const leadKey = getLeadKey(lead, index);
                   const status = leadStatuses[leadKey] || "Pending";
+                  const approvedPerson = approvedBy[leadKey] || "-";
 
                   return (
                     <tr
@@ -320,16 +330,30 @@ export default function AdminLeadsPage() {
                       </td>
 
                       <td className="px-4 py-4">
+                        {approvedPerson !== "-" ? (
+                          <span className="font-medium text-emerald-300">
+                            {approvedPerson}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">-</span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-4">
                         <div className="flex gap-2">
                           <button
-                            onClick={() => updateLeadStatus(leadKey, "Approved")}
+                            onClick={() =>
+                              updateLeadStatus(leadKey, "Approved")
+                            }
                             className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-400/15"
                           >
                             Approve
                           </button>
 
                           <button
-                            onClick={() => updateLeadStatus(leadKey, "Rejected")}
+                            onClick={() =>
+                              updateLeadStatus(leadKey, "Rejected")
+                            }
                             className="rounded-lg border border-red-400/20 bg-red-400/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-400/15"
                           >
                             Reject

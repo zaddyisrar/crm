@@ -5,30 +5,46 @@ import StatCard from "@/components/crm/StatCard";
 import { users } from "@/data/agents";
 import {
   Users,
-  UserCheck,
   ClipboardCheck,
   FileBarChart,
+  Activity,
 } from "lucide-react";
+
+const liveLeadActivity = [
+  {
+    agent: "Israr",
+    lead: "DLKSUHFIL",
+    company: "Nova Building Maintenance",
+    status: "Pending",
+    time: "07:48 PM",
+  },
+  {
+    agent: "Sameer",
+    lead: "John Carter",
+    company: "Deepi Clean",
+    status: "Pending",
+    time: "07:41 PM",
+  },
+  {
+    agent: "Asim",
+    lead: "Michael Brown",
+    company: "Capital Facilities",
+    status: "Approved",
+    time: "07:33 PM",
+  },
+];
 
 export default function ManagerDashboardPage() {
   const agents = users.filter((user) => user.role === "agent");
-  const managers = users.filter((user) => user.role === "manager");
 
   return (
     <ManagerShell>
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-5 md:grid-cols-3">
         <StatCard
           title="Total Agents"
           value={agents.length}
           subtitle="Registered active agents"
           icon={Users}
-        />
-
-        <StatCard
-          title="Managers"
-          value={managers.length}
-          subtitle="Manager level users"
-          icon={UserCheck}
         />
 
         <StatCard
@@ -46,74 +62,72 @@ export default function ManagerDashboardPage() {
         />
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <div className="rounded-[2rem] border border-cyan-300/15 bg-white/[0.03] p-6 backdrop-blur-xl">
-          <h2 className="text-xl font-black text-white">
-            Manager Overview
-          </h2>
+      <div className="mt-6 rounded-[2rem] border border-cyan-300/15 bg-white/[0.03] p-6 backdrop-blur-xl">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.35em] text-cyan-300">
+              Live Leads Activity
+            </p>
 
-          <p className="mt-2 text-sm text-slate-500">
-            This panel is designed for managing agents, approving submitted
-            leads, and reviewing attendance or agent performance reports.
-          </p>
+            <h2 className="mt-2 text-2xl font-black text-white">
+              Recent Agent Submissions
+            </h2>
 
-          <div className="mt-6 space-y-3">
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <p className="text-sm font-bold text-white">
-                Dashboard
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                Same overview style as admin for now.
-              </p>
-            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              Frontend preview of submitted leads. Real data will connect later.
+            </p>
+          </div>
 
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <p className="text-sm font-bold text-white">
-                Agents
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                Create, edit, delete, and manage agent accounts.
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <p className="text-sm font-bold text-white">
-                Approvals
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                Review all agent leads and approve or reject them.
-              </p>
-            </div>
+          <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-cyan-300">
+            <Activity size={22} />
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-cyan-300/15 bg-white/[0.03] p-6 backdrop-blur-xl">
-          <h2 className="text-xl font-black text-white">
-            Quick Access
-          </h2>
+        <div className="overflow-hidden rounded-2xl border border-white/10">
+          <table className="w-full min-w-[850px] text-left text-sm">
+            <thead className="bg-white/[0.04] text-xs uppercase tracking-[0.22em] text-cyan-300">
+              <tr>
+                <th className="px-5 py-4">Agent</th>
+                <th className="px-5 py-4">Lead Name</th>
+                <th className="px-5 py-4">Company</th>
+                <th className="px-5 py-4">Status</th>
+                <th className="px-5 py-4">Time</th>
+              </tr>
+            </thead>
 
-          <div className="mt-6 grid gap-3">
-            <a
-              href="/manager/agents"
-              className="rounded-2xl border border-cyan-300/15 bg-cyan-400/10 p-4 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400/15"
-            >
-              Open Agent Management
-            </a>
+            <tbody>
+              {liveLeadActivity.map((lead, index) => (
+                <tr
+                  key={index}
+                  className="border-t border-white/10 text-slate-300"
+                >
+                  <td className="px-5 py-4 font-bold text-white">
+                    {lead.agent}
+                  </td>
 
-            <a
-              href="/manager/approvals"
-              className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm font-bold text-slate-300 transition hover:border-cyan-300/20 hover:text-cyan-300"
-            >
-              Open Lead Approvals
-            </a>
+                  <td className="px-5 py-4">{lead.lead}</td>
 
-            <a
-              href="/manager/reports"
-              className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm font-bold text-slate-300 transition hover:border-cyan-300/20 hover:text-cyan-300"
-            >
-              Open Reports
-            </a>
-          </div>
+                  <td className="px-5 py-4">{lead.company}</td>
+
+                  <td className="px-5 py-4">
+                    <span
+                      className={`rounded-full border px-3 py-1 text-xs font-bold ${
+                        lead.status === "Approved"
+                          ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
+                          : "border-yellow-400/20 bg-yellow-400/10 text-yellow-300"
+                      }`}
+                    >
+                      {lead.status}
+                    </span>
+                  </td>
+
+                  <td className="px-5 py-4 text-slate-500">
+                    {lead.time}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </ManagerShell>

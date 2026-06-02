@@ -12,7 +12,7 @@ export default function ManagerShell({ children }) {
 
       <ManagerSidebar />
 
-      <main className="relative lg:ml-72 p-6">
+      <main className="relative p-6 lg:ml-72">
         <div className="mx-auto max-w-[1600px]">
           <ManagerTopbar />
 

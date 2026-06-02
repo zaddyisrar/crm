@@ -8,6 +8,7 @@ import {
   TrendingUp,
   Coffee,
   Bath,
+  ShieldCheck,
 } from "lucide-react";
 
 import AdminShell from "@/components/admin/AdminShell";
@@ -35,15 +36,12 @@ function normalizeStatus(value) {
 }
 
 export default function AdminPage() {
-  const [adminName, setAdminName] = useState("Admin");
   const [attendanceRows, setAttendanceRows] = useState([]);
   const [leadRows, setLeadRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-  setAdminName("Admin");
-
-  async function loadSheetData() {
+    async function loadSheetData() {
       try {
         const attendanceResponse = await sheetsGet("getAttendance");
         const leadsResponse = await sheetsGet("getLeads");
@@ -67,7 +65,9 @@ export default function AdminPage() {
   }, []);
 
   const today = getTodayKey();
+
   const agentUsers = users.filter((user) => user.role === "agent");
+  const managerUsers = users.filter((user) => user.role === "manager");
 
   const todayAttendance = attendanceRows.filter(
     (row) => normalizeDate(row.Date) === today
@@ -85,8 +85,8 @@ export default function AdminPage() {
     const latestRecord = records[records.length - 1];
 
     const presentToday = Boolean(latestRecord);
-    const checkIn = latestRecord?.CheckIn || "";
-    const checkOut = latestRecord?.CheckOut || "";
+    const loginAt = latestRecord?.CheckIn || "";
+    const logoutAt = latestRecord?.CheckOut || "";
     const status = presentToday
       ? normalizeStatus(latestRecord?.Status)
       : "Absent";
@@ -102,8 +102,8 @@ export default function AdminPage() {
 
     return {
       ...agent,
-      checkIn,
-      checkOut,
+      loginAt,
+      logoutAt,
       status,
       presentToday,
       activeNow,
@@ -122,6 +122,8 @@ export default function AdminPage() {
   const totalAgents = agentsData.length;
   const todayLeads = todayLeadsRows.length;
 
+  const activeManagersToday = managerUsers.length;
+
   const attendanceRate =
     totalAgents > 0 ? Math.round((presentAgents / totalAgents) * 100) : 0;
 
@@ -136,8 +138,8 @@ export default function AdminPage() {
             : agent.status === "Washroom"
             ? "Currently in washroom"
             : agent.status === "Checked Out"
-            ? `Checked out at ${agent.checkOut || "-"}`
-            : `Checked in at ${agent.checkIn || "-"}`;
+            ? `Logout at ${agent.logoutAt || "-"}`
+            : `Login at ${agent.loginAt || "-"}`;
 
         return {
           agent: agent.name,
@@ -154,6 +156,13 @@ export default function AdminPage() {
       note: "Working now",
       icon: Users,
       color: "text-emerald-300",
+    },
+    {
+      title: "Active Manager Today",
+      value: loading ? "..." : activeManagersToday,
+      note: "Manager access",
+      icon: ShieldCheck,
+      color: "text-cyan-300",
     },
     {
       title: "On Break",
@@ -192,6 +201,10 @@ export default function AdminPage() {
       value: loading ? "..." : activeAgents,
     },
     {
+      title: "Active Manager Today",
+      value: loading ? "..." : activeManagersToday,
+    },
+    {
       title: "On Break",
       value: loading ? "..." : breakAgents,
     },
@@ -213,16 +226,11 @@ export default function AdminPage() {
         </p>
 
         <h1 className="mt-3 text-4xl font-black text-white">
-  Welcome Back, Admin
-</h1>
-
-        <p className="mt-2 text-sm text-slate-500">
-          Live attendance, break, washroom, checkout, and lead activity from
-          Google Sheets.
-        </p>
+          Welcome Back, Admin
+        </h1>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         {stats.map((card) => {
           const Icon = card.icon;
 

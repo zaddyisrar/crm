@@ -47,19 +47,13 @@ export default function ManagerSidebar() {
 
   return (
     <aside className="fixed left-0 top-0 z-40 hidden h-screen w-72 border-r border-cyan-300/10 bg-[#03060b]/90 p-5 backdrop-blur-xl lg:block">
-      <div className="rounded-3xl border border-cyan-300/15 bg-white/[0.03] p-5">
-        <p className="text-xs uppercase tracking-[0.35em] text-cyan-300">
-          LeadsRift
-        </p>
-
-        <h2 className="mt-2 text-2xl font-black text-white">
-          Manager Panel
-        </h2>
-
-        <p className="mt-2 text-xs text-slate-500">
-          Operations & agent control
-        </p>
-      </div>
+      <div className="mb-8 flex justify-center">
+  <img
+    src="/crm-logo.png"
+    alt="CRM"
+    className="h-auto w-[160px]"
+  />
+</div>
 
       <nav className="mt-6 space-y-2">
         {links.map((item) => {
