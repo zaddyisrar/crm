@@ -3,8 +3,18 @@
 import { useEffect } from "react";
 import { sheetsPost } from "@/lib/sheetsApi";
 
+const AUTO_LOGOUT_ENABLED = true;
+
+// Testing mode: 8 hours
+const INACTIVITY_LIMIT = 8 * 60 * 60 * 1000;
+
+// Later production option:
+// const INACTIVITY_LIMIT = 30 * 60 * 1000;
+
 export default function AutoLogout() {
   useEffect(() => {
+    if (!AUTO_LOGOUT_ENABLED) return;
+
     const role = localStorage.getItem("crmRole");
     const userId = localStorage.getItem("crmUserId");
     const userName = localStorage.getItem("crmUserName");
@@ -16,12 +26,12 @@ export default function AutoLogout() {
     const logoutUser = async () => {
       try {
         await sheetsPost({
-          action: "checkOut",
+          action: "attendanceLogout",
           agentId: userId,
-          name: userName || userId,
+          agentName: userName || userId,
         });
       } catch (error) {
-        console.error("Auto logout checkout failed:", error);
+        console.error("Auto logout attendance logout failed:", error);
       }
 
       localStorage.removeItem("crmRole");
@@ -33,7 +43,7 @@ export default function AutoLogout() {
 
     const resetTimer = () => {
       clearTimeout(timer);
-      timer = setTimeout(logoutUser, 2 * 60 * 1000);
+      timer = setTimeout(logoutUser, INACTIVITY_LIMIT);
     };
 
     const events = ["mousemove", "keydown", "click", "scroll", "touchstart"];
@@ -46,6 +56,7 @@ export default function AutoLogout() {
 
     return () => {
       clearTimeout(timer);
+
       events.forEach((event) => {
         window.removeEventListener(event, resetTimer);
       });
