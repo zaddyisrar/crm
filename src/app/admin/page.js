@@ -14,10 +14,6 @@ import {
 import AdminShell from "@/components/admin/AdminShell";
 import { sheetsPost } from "@/lib/sheetsApi";
 
-function getTodayKey() {
-  return new Date().toISOString().split("T")[0];
-}
-
 function normalizeDate(value) {
   if (!value) return "";
 
@@ -27,11 +23,36 @@ function normalizeDate(value) {
     return stringValue.split("T")[0];
   }
 
+  if (stringValue.includes("GMT")) {
+    const date = new Date(stringValue);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toISOString().split("T")[0];
+    }
+  }
+
   return stringValue;
 }
 
-function normalizeStatus(value) {
-  return String(value || "Absent").trim();
+function normalizeStatus(value, logoutTime) {
+  if (logoutTime && logoutTime !== "-") return "Checked Out";
+
+  const status = String(value || "Absent").trim();
+
+  if (!status || status === "-") return "Absent";
+
+  return status;
+}
+
+function getLatestRecordForAgent(rows, agentId) {
+  const cleanAgentId = String(agentId || "").toUpperCase();
+
+  const agentRows = rows.filter(
+    (row) => String(row.AgentID || "").toUpperCase() === cleanAgentId
+  );
+
+  if (agentRows.length === 0) return null;
+
+  return agentRows[agentRows.length - 1];
 }
 
 export default function AdminPage() {
@@ -71,25 +92,6 @@ export default function AdminPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const today = getTodayKey();
-
-  const latestAttendanceDate =
-    attendanceRows
-      .map((row) => normalizeDate(row.Date))
-      .filter(Boolean)
-      .sort()
-      .at(-1) || today;
-
-  const latestLeadDate =
-    leadRows
-      .map((row) => normalizeDate(row.Date))
-      .filter(Boolean)
-      .sort()
-      .at(-1) || today;
-
-  const dashboardAttendanceDate = latestAttendanceDate;
-  const dashboardLeadDate = latestLeadDate;
-
   const agentUsers = agentRows.filter(
     (user) => String(user.Role || "").toLowerCase() === "agent"
   );
@@ -98,43 +100,31 @@ export default function AdminPage() {
     (user) => String(user.Role || "").toLowerCase() === "manager"
   );
 
-  const todayAttendance = attendanceRows.filter(
-    (row) => normalizeDate(row.Date) === dashboardAttendanceDate
-  );
-
-  const todayLeadsRows = leadRows.filter(
-    (row) => normalizeDate(row.Date) === dashboardLeadDate
-  );
-
   const agentsData = agentUsers.map((agent) => {
     const agentId = String(agent.AgentID || "").toUpperCase();
 
-    const records = todayAttendance.filter(
-      (row) => String(row.AgentID || "").toUpperCase() === agentId
-    );
-
-    const latestRecord = records[records.length - 1];
-
-    const presentToday = Boolean(latestRecord);
+    const latestRecord = getLatestRecordForAgent(attendanceRows, agentId);
 
     const loginAt = latestRecord?.LoginTime || "";
     const logoutAt = latestRecord?.LogoutTime || "";
 
-    const status = presentToday
-      ? normalizeStatus(latestRecord?.Status)
+    const status = latestRecord
+      ? normalizeStatus(latestRecord?.Status, logoutAt)
       : "Absent";
 
+    const presentToday = Boolean(latestRecord);
     const activeNow = status === "Active";
     const onBreak = status === "Break";
     const inWashroom = status === "Washroom";
     const checkedOut = status === "Checked Out";
 
-    const todayLeads = todayLeadsRows.filter(
+    const agentLeads = leadRows.filter(
       (lead) => String(lead.AgentID || "").toUpperCase() === agentId
     );
 
     return {
       ...agent,
+      latestDate: latestRecord?.Date || "",
       loginAt,
       logoutAt,
       status,
@@ -143,7 +133,7 @@ export default function AdminPage() {
       onBreak,
       inWashroom,
       checkedOut,
-      todayLeads,
+      leads: agentLeads,
     };
   });
 
@@ -153,7 +143,7 @@ export default function AdminPage() {
   const checkedOutAgents = agentsData.filter((x) => x.checkedOut).length;
   const presentAgents = agentsData.filter((x) => x.presentToday).length;
   const totalAgents = agentsData.length;
-  const todayLeads = todayLeadsRows.length;
+  const totalLeads = leadRows.length;
 
   const activeManagersToday = managerUsers.length;
 
@@ -163,7 +153,7 @@ export default function AdminPage() {
   const liveOperations = useMemo(() => {
     return agentsData
       .filter((agent) => agent.presentToday)
-      .slice(0, 8)
+      .slice(0, 10)
       .map((agent) => {
         const action =
           agent.status === "Break"
@@ -178,6 +168,7 @@ export default function AdminPage() {
           agent: agent.AgentName || agent.AgentID || "Agent",
           action,
           status: agent.status,
+          date: normalizeDate(agent.latestDate),
         };
       });
   }, [agentsData]);
@@ -186,7 +177,7 @@ export default function AdminPage() {
     {
       title: "Active Agents",
       value: loading ? "..." : activeAgents,
-      note: "Working now",
+      note: "Latest status",
       icon: Users,
       color: "text-emerald-300",
     },
@@ -200,21 +191,21 @@ export default function AdminPage() {
     {
       title: "On Break",
       value: loading ? "..." : breakAgents,
-      note: "Break status",
+      note: "Latest status",
       icon: Coffee,
       color: "text-yellow-300",
     },
     {
       title: "Washroom",
       value: loading ? "..." : washroomAgents,
-      note: "Away temporarily",
+      note: "Latest status",
       icon: Bath,
       color: "text-purple-300",
     },
     {
       title: "Attendance",
       value: loading ? "..." : `${attendanceRate}%`,
-      note: loading ? "Loading..." : `${presentAgents}/${totalAgents} present`,
+      note: loading ? "Loading..." : `${presentAgents}/${totalAgents} tracked`,
       icon: Clock3,
       color: "text-cyan-300",
     },
@@ -222,11 +213,11 @@ export default function AdminPage() {
 
   const summary = [
     {
-      title: "Leads Added Latest",
-      value: loading ? "..." : todayLeads,
+      title: "Total Leads",
+      value: loading ? "..." : totalLeads,
     },
     {
-      title: "Present Agents",
+      title: "Tracked Agents",
       value: loading ? "..." : presentAgents,
     },
     {
@@ -263,8 +254,7 @@ export default function AdminPage() {
         </h1>
 
         <p className="mt-2 text-xs text-slate-500">
-          Showing latest activity date. Attendance: {dashboardAttendanceDate} ·
-          Leads: {dashboardLeadDate}
+          Showing latest attendance record per agent.
         </p>
       </div>
 
@@ -306,7 +296,7 @@ export default function AdminPage() {
               </div>
             ) : liveOperations.length === 0 ? (
               <div className="rounded-xl border border-white/5 bg-black/20 px-4 py-8 text-center text-sm text-slate-500">
-                No agent activity for latest attendance date.
+                No agent activity found.
               </div>
             ) : (
               liveOperations.map((x, index) => (
@@ -316,7 +306,9 @@ export default function AdminPage() {
                 >
                   <div>
                     <p className="font-semibold text-white">{x.agent}</p>
-                    <p className="mt-1 text-sm text-slate-500">{x.action}</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {x.action} {x.date ? `· ${x.date}` : ""}
+                    </p>
                   </div>
 
                   <StatusPill status={x.status} />
