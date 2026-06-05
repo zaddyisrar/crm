@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CalendarDays,
+  RefreshCcw,
 } from "lucide-react";
 
 import AdminShell from "@/components/admin/AdminShell";
@@ -36,23 +37,15 @@ function moveDate(dateKey, days) {
 
 function normalizeDate(value) {
   if (!value) return "";
-
-  const stringValue = String(value);
-
-  if (stringValue.includes("T")) {
-    return stringValue.split("T")[0];
-  }
-
-  return stringValue.trim();
+  const stringValue = String(value).trim();
+  if (stringValue.includes("T")) return stringValue.split("T")[0];
+  return stringValue;
 }
 
 function normalizeStatus(value, logoutTime) {
   if (logoutTime && logoutTime !== "-") return "Checked Out";
-
   const status = String(value || "Active").trim();
-
   if (!status || status === "-") return "Active";
-
   return status;
 }
 
@@ -60,20 +53,14 @@ export default function AttendancePage() {
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [agentRows, setAgentRows] = useState([]);
   const [attendanceRows, setAttendanceRows] = useState([]);
-  const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
 
   async function loadAttendance(showLoader = false) {
     try {
       if (showLoader) setLoading(true);
 
-      const attendanceResponse = await sheetsPost({
-        action: "getAttendance",
-      });
-
-      const agentsResponse = await sheetsPost({
-        action: "getAgents",
-      });
+      const attendanceResponse = await sheetsPost({ action: "getAttendance" });
+      const agentsResponse = await sheetsPost({ action: "getAgents" });
 
       setAttendanceRows(attendanceResponse.data || []);
       setAgentRows(agentsResponse.data || []);
@@ -96,15 +83,13 @@ export default function AttendancePage() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
+  const records = useMemo(() => {
     const selectedRows = attendanceRows.filter(
       (row) => normalizeDate(row.Date) === selectedDate
     );
 
-    const agentRecords = agentRows
-      .filter(
-        (user) => String(user.Role || "").toLowerCase() === "agent"
-      )
+    return agentRows
+      .filter((user) => String(user.Role || "").toLowerCase() === "agent")
       .map((agent) => {
         const agentId = String(agent.AgentID || "").toUpperCase();
 
@@ -112,8 +97,7 @@ export default function AttendancePage() {
           (row) => String(row.AgentID || "").toUpperCase() === agentId
         );
 
-        const latestRecord =
-          agentAttendanceRows[agentAttendanceRows.length - 1];
+        const latestRecord = agentAttendanceRows[agentAttendanceRows.length - 1];
 
         const loginAt = latestRecord?.LoginTime || "-";
         const logoutAt = latestRecord?.LogoutTime || "-";
@@ -130,8 +114,6 @@ export default function AttendancePage() {
           status,
         };
       });
-
-    setRecords(agentRecords);
   }, [attendanceRows, agentRows, selectedDate]);
 
   const present = records.filter((x) => x.status !== "Absent").length;
@@ -140,9 +122,9 @@ export default function AttendancePage() {
   const washroom = records.filter((x) => x.status === "Washroom").length;
   const checkedOut = records.filter((x) => x.status === "Checked Out").length;
 
-  const recentRecords = useMemo(() => {
-    return records.filter((item) => item.status !== "Absent").slice(0, 5);
-  }, [records]);
+  const recentRecords = records
+    .filter((item) => item.status !== "Absent")
+    .slice(0, 5);
 
   return (
     <AdminShell>
@@ -152,7 +134,13 @@ export default function AttendancePage() {
         </p>
 
         <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <h1 className="text-4xl font-black text-white">Attendance</h1>
+          <div>
+            <h1 className="text-4xl font-black text-white">Attendance</h1>
+            <p className="mt-2 text-xs text-slate-500">
+              Historical selected-date view. Live current status is shown on the
+              Admin Dashboard.
+            </p>
+          </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -182,41 +170,25 @@ export default function AttendancePage() {
             >
               Today
             </button>
+
+            <button
+              onClick={() => loadAttendance(true)}
+              disabled={loading}
+              className="flex items-center gap-2 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm font-bold text-cyan-300 hover:bg-cyan-300/15 disabled:opacity-60"
+            >
+              <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
+              Refresh
+            </button>
           </div>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <Stat
-          title="Present"
-          value={loading ? "..." : present}
-          icon={UserCheck}
-          tone="emerald"
-        />
-        <Stat
-          title="Active Now"
-          value={loading ? "..." : active}
-          icon={Clock3}
-          tone="cyan"
-        />
-        <Stat
-          title="On Break"
-          value={loading ? "..." : onBreak}
-          icon={Coffee}
-          tone="yellow"
-        />
-        <Stat
-          title="Washroom"
-          value={loading ? "..." : washroom}
-          icon={Bath}
-          tone="purple"
-        />
-        <Stat
-          title="Checked Out"
-          value={loading ? "..." : checkedOut}
-          icon={LogOut}
-          tone="orange"
-        />
+        <Stat title="Present" value={loading ? "..." : present} icon={UserCheck} tone="emerald" />
+        <Stat title="Active Now" value={loading ? "..." : active} icon={Clock3} tone="cyan" />
+        <Stat title="On Break" value={loading ? "..." : onBreak} icon={Coffee} tone="yellow" />
+        <Stat title="Washroom" value={loading ? "..." : washroom} icon={Bath} tone="purple" />
+        <Stat title="Checked Out" value={loading ? "..." : checkedOut} icon={LogOut} tone="orange" />
       </div>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.5fr_0.8fr]">
@@ -241,28 +213,20 @@ export default function AttendancePage() {
             <tbody className="divide-y divide-white/10">
               {loading ? (
                 <tr>
-                  <td
-                    colSpan="5"
-                    className="px-5 py-8 text-center text-slate-500"
-                  >
+                  <td colSpan="5" className="px-5 py-8 text-center text-slate-500">
                     Loading attendance records...
                   </td>
                 </tr>
               ) : records.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan="5"
-                    className="px-5 py-8 text-center text-slate-500"
-                  >
+                  <td colSpan="5" className="px-5 py-8 text-center text-slate-500">
                     No agents found.
                   </td>
                 </tr>
               ) : (
                 records.map((agent) => (
                   <tr key={agent.id} className="text-slate-300">
-                    <td className="px-5 py-4 font-bold text-white">
-                      {agent.name}
-                    </td>
+                    <td className="px-5 py-4 font-bold text-white">{agent.name}</td>
                     <td className="px-5 py-4 text-cyan-300">{agent.id}</td>
                     <td className="px-5 py-4">{agent.loginAt}</td>
                     <td className="px-5 py-4">{agent.logoutAt}</td>
@@ -298,10 +262,7 @@ export default function AttendancePage() {
               </div>
             ) : (
               recentRecords.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-2xl border border-white/10 bg-black/20 p-4"
-                >
+                <div key={item.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="font-bold text-white">{item.name}</p>
@@ -313,13 +274,11 @@ export default function AttendancePage() {
 
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-400">
                     <p>
-                      Login At:{" "}
-                      <span className="text-cyan-300">{item.loginAt}</span>
+                      Login At: <span className="text-cyan-300">{item.loginAt}</span>
                     </p>
 
                     <p>
-                      Logout At:{" "}
-                      <span className="text-cyan-300">{item.logoutAt}</span>
+                      Logout At: <span className="text-cyan-300">{item.logoutAt}</span>
                     </p>
                   </div>
                 </div>
@@ -363,11 +322,7 @@ function StatusPill({ status }) {
   };
 
   return (
-    <span
-      className={`rounded-lg border px-3 py-1 text-xs ${
-        styles[status] || styles.Absent
-      }`}
-    >
+    <span className={`rounded-lg border px-3 py-1 text-xs ${styles[status] || styles.Absent}`}>
       {status}
     </span>
   );
