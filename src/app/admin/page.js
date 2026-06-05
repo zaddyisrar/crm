@@ -21,13 +21,13 @@ function getTodayKey() {
 function normalizeDate(value) {
   if (!value) return "";
 
-  const stringValue = String(value);
+  const stringValue = String(value).trim();
 
   if (stringValue.includes("T")) {
     return stringValue.split("T")[0];
   }
 
-  return stringValue.trim();
+  return stringValue;
 }
 
 function normalizeStatus(value) {
@@ -73,30 +73,38 @@ export default function AdminPage() {
 
   const today = getTodayKey();
 
-const latestAttendanceDate =
-  attendanceRows
-    .map((row) => normalizeDate(row.Date))
-    .filter(Boolean)
-    .sort()
-    .at(-1) || today;
+  const latestAttendanceDate =
+    attendanceRows
+      .map((row) => normalizeDate(row.Date))
+      .filter(Boolean)
+      .sort()
+      .at(-1) || today;
 
-const latestLeadDate =
-  leadRows
-    .map((row) => normalizeDate(row.Date))
-    .filter(Boolean)
-    .sort()
-    .at(-1) || today;
+  const latestLeadDate =
+    leadRows
+      .map((row) => normalizeDate(row.Date))
+      .filter(Boolean)
+      .sort()
+      .at(-1) || today;
 
-const dashboardAttendanceDate = latestAttendanceDate;
-const dashboardLeadDate = latestLeadDate;
+  const dashboardAttendanceDate = latestAttendanceDate;
+  const dashboardLeadDate = latestLeadDate;
 
-const todayAttendance = attendanceRows.filter(
-  (row) => normalizeDate(row.Date) === dashboardAttendanceDate
-);
+  const agentUsers = agentRows.filter(
+    (user) => String(user.Role || "").toLowerCase() === "agent"
+  );
 
-const todayLeadsRows = leadRows.filter(
-  (row) => normalizeDate(row.Date) === dashboardLeadDate
-);
+  const managerUsers = agentRows.filter(
+    (user) => String(user.Role || "").toLowerCase() === "manager"
+  );
+
+  const todayAttendance = attendanceRows.filter(
+    (row) => normalizeDate(row.Date) === dashboardAttendanceDate
+  );
+
+  const todayLeadsRows = leadRows.filter(
+    (row) => normalizeDate(row.Date) === dashboardLeadDate
+  );
 
   const agentsData = agentUsers.map((agent) => {
     const agentId = String(agent.AgentID || "").toUpperCase();
@@ -108,6 +116,7 @@ const todayLeadsRows = leadRows.filter(
     const latestRecord = records[records.length - 1];
 
     const presentToday = Boolean(latestRecord);
+
     const loginAt = latestRecord?.LoginTime || "";
     const logoutAt = latestRecord?.LogoutTime || "";
 
@@ -213,7 +222,7 @@ const todayLeadsRows = leadRows.filter(
 
   const summary = [
     {
-      title: "Leads Added Today",
+      title: "Leads Added Latest",
       value: loading ? "..." : todayLeads,
     },
     {
@@ -252,6 +261,11 @@ const todayLeadsRows = leadRows.filter(
         <h1 className="mt-3 text-4xl font-black text-white">
           Welcome Back, Admin
         </h1>
+
+        <p className="mt-2 text-xs text-slate-500">
+          Showing latest activity date. Attendance: {dashboardAttendanceDate} ·
+          Leads: {dashboardLeadDate}
+        </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -292,7 +306,7 @@ const todayLeadsRows = leadRows.filter(
               </div>
             ) : liveOperations.length === 0 ? (
               <div className="rounded-xl border border-white/5 bg-black/20 px-4 py-8 text-center text-sm text-slate-500">
-                No agent activity today.
+                No agent activity for latest attendance date.
               </div>
             ) : (
               liveOperations.map((x, index) => (
@@ -315,7 +329,7 @@ const todayLeadsRows = leadRows.filter(
         <div className="rounded-[1.6rem] border border-cyan-300/10 bg-white/[0.03] p-5">
           <div className="mb-5 flex items-center gap-3">
             <TrendingUp className="text-cyan-300" size={18} />
-            <h2 className="text-lg font-bold text-white">Today Summary</h2>
+            <h2 className="text-lg font-bold text-white">Latest Summary</h2>
           </div>
 
           <div className="space-y-3">
