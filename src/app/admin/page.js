@@ -73,21 +73,32 @@ export default function AdminPage() {
 
   const today = getTodayKey();
 
-  const agentUsers = agentRows.filter(
-    (user) => String(user.Role || "").toLowerCase() === "agent"
-  );
+  const today = getTodayKey();
 
-  const managerUsers = agentRows.filter(
-    (user) => String(user.Role || "").toLowerCase() === "manager"
-  );
+const latestAttendanceDate =
+  attendanceRows
+    .map((row) => normalizeDate(row.Date))
+    .filter(Boolean)
+    .sort()
+    .at(-1) || today;
 
-  const todayAttendance = attendanceRows.filter(
-    (row) => normalizeDate(row.Date) === today
-  );
+const latestLeadDate =
+  leadRows
+    .map((row) => normalizeDate(row.Date))
+    .filter(Boolean)
+    .sort()
+    .at(-1) || today;
 
-  const todayLeadsRows = leadRows.filter(
-    (row) => normalizeDate(row.Date) === today
-  );
+const dashboardAttendanceDate = latestAttendanceDate;
+const dashboardLeadDate = latestLeadDate;
+
+const todayAttendance = attendanceRows.filter(
+  (row) => normalizeDate(row.Date) === dashboardAttendanceDate
+);
+
+const todayLeadsRows = leadRows.filter(
+  (row) => normalizeDate(row.Date) === dashboardLeadDate
+);
 
   const agentsData = agentUsers.map((agent) => {
     const agentId = String(agent.AgentID || "").toUpperCase();
