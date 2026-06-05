@@ -44,13 +44,23 @@ function getWorkingDaysInMonth(year, month) {
 function normalizeDate(value) {
   if (!value) return "";
 
-  const stringValue = String(value).trim();
+  const raw = String(value).trim();
 
-  if (stringValue.includes("T")) {
-    return stringValue.split("T")[0];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
   }
 
-  return stringValue;
+  const date = new Date(value);
+
+  if (!Number.isNaN(date.getTime())) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
+  return raw;
 }
 
 function getMonthFromDate(value) {
