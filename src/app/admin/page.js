@@ -73,8 +73,6 @@ export default function AdminPage() {
 
   const today = getTodayKey();
 
-  const today = getTodayKey();
-
 const latestAttendanceDate =
   attendanceRows
     .map((row) => normalizeDate(row.Date))
