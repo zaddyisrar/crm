@@ -17,7 +17,12 @@ import AdminShell from "@/components/admin/AdminShell";
 import { sheetsPost } from "@/lib/sheetsApi";
 
 function getTodayKey() {
-  return new Date().toISOString().split("T")[0];
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function formatDateLabel(dateKey) {
@@ -32,20 +37,62 @@ function formatDateLabel(dateKey) {
 function moveDate(dateKey, days) {
   const date = new Date(dateKey + "T00:00:00");
   date.setDate(date.getDate() + days);
-  return date.toISOString().split("T")[0];
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function normalizeDate(value) {
   if (!value) return "";
-  const stringValue = String(value).trim();
-  if (stringValue.includes("T")) return stringValue.split("T")[0];
-  return stringValue;
+
+  const raw = String(value).trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+
+  const date = new Date(value);
+
+  if (!Number.isNaN(date.getTime())) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
+  return raw;
+}
+
+function normalizeTime(value) {
+  if (!value) return "-";
+
+  const raw = String(value).trim();
+
+  if (!raw || raw === "-") return "-";
+
+  const date = new Date(value);
+
+  if (!Number.isNaN(date.getTime())) {
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  return raw;
 }
 
 function normalizeStatus(value, logoutTime) {
   if (logoutTime && logoutTime !== "-") return "Checked Out";
+
   const status = String(value || "Active").trim();
+
   if (!status || status === "-") return "Active";
+
   return status;
 }
 
@@ -59,8 +106,13 @@ export default function AttendancePage() {
     try {
       if (showLoader) setLoading(true);
 
-      const attendanceResponse = await sheetsPost({ action: "getAttendance" });
-      const agentsResponse = await sheetsPost({ action: "getAgents" });
+      const attendanceResponse = await sheetsPost({
+        action: "getAttendance",
+      });
+
+      const agentsResponse = await sheetsPost({
+        action: "getAgents",
+      });
 
       setAttendanceRows(attendanceResponse.data || []);
       setAgentRows(agentsResponse.data || []);
@@ -88,33 +140,23 @@ export default function AttendancePage() {
       (row) => normalizeDate(row.Date) === selectedDate
     );
 
-    return agentRows
-      .filter((user) => String(user.Role || "").toLowerCase() === "agent")
-      .map((agent) => {
-        const agentId = String(agent.AgentID || "").toUpperCase();
+    return selectedRows.map((row, index) => {
+      const loginAt = normalizeTime(row.LoginTime);
+      const logoutAt = normalizeTime(row.LogoutTime);
 
-        const agentAttendanceRows = selectedRows.filter(
-          (row) => String(row.AgentID || "").toUpperCase() === agentId
-        );
-
-        const latestRecord = agentAttendanceRows[agentAttendanceRows.length - 1];
-
-        const loginAt = latestRecord?.LoginTime || "-";
-        const logoutAt = latestRecord?.LogoutTime || "-";
-
-        const status = latestRecord
-          ? normalizeStatus(latestRecord?.Status, logoutAt)
-          : "Absent";
-
-        return {
-          id: agent.AgentID || "-",
-          name: agent.AgentName || "Agent",
-          loginAt,
-          logoutAt,
-          status,
-        };
-      });
-  }, [attendanceRows, agentRows, selectedDate]);
+      return {
+        id: row.AgentID || "-",
+        name: row.AgentName || "Agent",
+        loginAt,
+        logoutAt,
+        status: normalizeStatus(row.Status, logoutAt),
+        updatedAt: normalizeTime(row.UpdatedAt),
+        rowKey: `${row.AgentID || "agent"}-${normalizeDate(row.Date)}-${
+          row.LoginTime || "login"
+        }-${index}`,
+      };
+    });
+  }, [attendanceRows, selectedDate]);
 
   const present = records.filter((x) => x.status !== "Absent").length;
   const active = records.filter((x) => x.status === "Active").length;
@@ -124,7 +166,7 @@ export default function AttendancePage() {
 
   const recentRecords = records
     .filter((item) => item.status !== "Absent")
-    .slice(0, 5);
+    .slice(0, 8);
 
   return (
     <AdminShell>
@@ -136,6 +178,7 @@ export default function AttendancePage() {
         <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-4xl font-black text-white">Attendance</h1>
+
             <p className="mt-2 text-xs text-slate-500">
               Historical selected-date view. Live current status is shown on the
               Admin Dashboard.
@@ -174,7 +217,7 @@ export default function AttendancePage() {
             <button
               onClick={() => loadAttendance(true)}
               disabled={loading}
-              className="flex items-center gap-2 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm font-bold text-cyan-300 hover:bg-cyan-300/15 disabled:opacity-60"
+              className="flex items-center gap-2 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm font-bold text-cyan-300 hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
               Refresh
@@ -184,11 +227,40 @@ export default function AttendancePage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <Stat title="Present" value={loading ? "..." : present} icon={UserCheck} tone="emerald" />
-        <Stat title="Active Now" value={loading ? "..." : active} icon={Clock3} tone="cyan" />
-        <Stat title="On Break" value={loading ? "..." : onBreak} icon={Coffee} tone="yellow" />
-        <Stat title="Washroom" value={loading ? "..." : washroom} icon={Bath} tone="purple" />
-        <Stat title="Checked Out" value={loading ? "..." : checkedOut} icon={LogOut} tone="orange" />
+        <Stat
+          title="Present"
+          value={loading ? "..." : present}
+          icon={UserCheck}
+          tone="emerald"
+        />
+
+        <Stat
+          title="Active Now"
+          value={loading ? "..." : active}
+          icon={Clock3}
+          tone="cyan"
+        />
+
+        <Stat
+          title="On Break"
+          value={loading ? "..." : onBreak}
+          icon={Coffee}
+          tone="yellow"
+        />
+
+        <Stat
+          title="Washroom"
+          value={loading ? "..." : washroom}
+          icon={Bath}
+          tone="purple"
+        />
+
+        <Stat
+          title="Checked Out"
+          value={loading ? "..." : checkedOut}
+          icon={LogOut}
+          tone="orange"
+        />
       </div>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.5fr_0.8fr]">
@@ -199,45 +271,64 @@ export default function AttendancePage() {
             </p>
           </div>
 
-          <table className="w-full min-w-[850px] text-left text-sm">
-            <thead className="bg-white/[0.03] text-slate-400">
-              <tr>
-                <th className="px-5 py-4 font-medium">Agent</th>
-                <th className="px-5 py-4 font-medium">Login ID</th>
-                <th className="px-5 py-4 font-medium">Login At</th>
-                <th className="px-5 py-4 font-medium">Logout At</th>
-                <th className="px-5 py-4 font-medium">Status</th>
-              </tr>
-            </thead>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] text-left text-sm">
+              <thead className="bg-white/[0.03] text-slate-400">
+                <tr>
+                  <th className="px-5 py-4 font-medium">Agent</th>
+                  <th className="px-5 py-4 font-medium">Login ID</th>
+                  <th className="px-5 py-4 font-medium">Login At</th>
+                  <th className="px-5 py-4 font-medium">Logout At</th>
+                  <th className="px-5 py-4 font-medium">Status</th>
+                  <th className="px-5 py-4 font-medium">Updated</th>
+                </tr>
+              </thead>
 
-            <tbody className="divide-y divide-white/10">
-              {loading ? (
-                <tr>
-                  <td colSpan="5" className="px-5 py-8 text-center text-slate-500">
-                    Loading attendance records...
-                  </td>
-                </tr>
-              ) : records.length === 0 ? (
-                <tr>
-                  <td colSpan="5" className="px-5 py-8 text-center text-slate-500">
-                    No agents found.
-                  </td>
-                </tr>
-              ) : (
-                records.map((agent) => (
-                  <tr key={agent.id} className="text-slate-300">
-                    <td className="px-5 py-4 font-bold text-white">{agent.name}</td>
-                    <td className="px-5 py-4 text-cyan-300">{agent.id}</td>
-                    <td className="px-5 py-4">{agent.loginAt}</td>
-                    <td className="px-5 py-4">{agent.logoutAt}</td>
-                    <td className="px-5 py-4">
-                      <StatusPill status={agent.status} />
+              <tbody className="divide-y divide-white/10">
+                {loading ? (
+                  <tr>
+                    <td
+                      colSpan="6"
+                      className="px-5 py-8 text-center text-slate-500"
+                    >
+                      Loading attendance records...
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : records.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan="6"
+                      className="px-5 py-8 text-center text-slate-500"
+                    >
+                      No records found for selected date.
+                    </td>
+                  </tr>
+                ) : (
+                  records.map((agent) => (
+                    <tr key={agent.rowKey} className="text-slate-300">
+                      <td className="px-5 py-4 font-bold text-white">
+                        {agent.name}
+                      </td>
+
+                      <td className="px-5 py-4 text-cyan-300">{agent.id}</td>
+
+                      <td className="px-5 py-4">{agent.loginAt}</td>
+
+                      <td className="px-5 py-4">{agent.logoutAt}</td>
+
+                      <td className="px-5 py-4">
+                        <StatusPill status={agent.status} />
+                      </td>
+
+                      <td className="px-5 py-4 text-slate-500">
+                        {agent.updatedAt}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div className="rounded-[1.6rem] border border-cyan-300/10 bg-white/[0.03] p-5">
@@ -262,7 +353,10 @@ export default function AttendancePage() {
               </div>
             ) : (
               recentRecords.map((item) => (
-                <div key={item.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <div
+                  key={item.rowKey}
+                  className="rounded-2xl border border-white/10 bg-black/20 p-4"
+                >
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="font-bold text-white">{item.name}</p>
@@ -274,11 +368,18 @@ export default function AttendancePage() {
 
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-400">
                     <p>
-                      Login At: <span className="text-cyan-300">{item.loginAt}</span>
+                      Login At:{" "}
+                      <span className="text-cyan-300">{item.loginAt}</span>
                     </p>
 
                     <p>
-                      Logout At: <span className="text-cyan-300">{item.logoutAt}</span>
+                      Logout At:{" "}
+                      <span className="text-cyan-300">{item.logoutAt}</span>
+                    </p>
+
+                    <p className="col-span-2">
+                      Updated:{" "}
+                      <span className="text-cyan-300">{item.updatedAt}</span>
                     </p>
                   </div>
                 </div>
@@ -322,7 +423,11 @@ function StatusPill({ status }) {
   };
 
   return (
-    <span className={`rounded-lg border px-3 py-1 text-xs ${styles[status] || styles.Absent}`}>
+    <span
+      className={`rounded-lg border px-3 py-1 text-xs ${
+        styles[status] || styles.Absent
+      }`}
+    >
       {status}
     </span>
   );
