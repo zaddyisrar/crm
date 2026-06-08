@@ -15,4 +15,6 @@ export const clientOptions = [
   { id: 14, name: "Operations", company: "I & G Cleaning Services", phone: "+1 555 100 1014", email: "contact@igcleaningservices.com", status: "New" },
   { id: 15, name: "Admin", company: "Optimal Cleaning Services Ltd.", phone: "+1 555 100 1015", email: "hello@optimalcleaningservices.com", status: "New" },
   { id: 16, name: "Support Team", company: "Tetra Maintenance", phone: "+1 555 100 1016", email: "contact@tetramaintenance.com", status: "New" },
+  { id: 17, name: "Management", company: "C MIC (Cheer)", phone: "+1 555 100 1017", email: "contact@cmiccheer.com", status: "New" },
+  { id: 18, name: "Operations Team", company: "Summit Facility Solutions", phone: "+1 555 100 1018", email: "contact@summitfacilitysolutions.com", status: "New" },
 ];

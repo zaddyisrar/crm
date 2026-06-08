@@ -14,19 +14,53 @@ import {
 } from "lucide-react";
 
 function getTodayKey() {
-  return new Date().toISOString().split("T")[0];
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function normalizeDate(value) {
   if (!value) return "";
 
-  const stringValue = String(value).trim();
+  const raw = String(value).trim();
 
-  if (stringValue.includes("T")) {
-    return stringValue.split("T")[0];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
   }
 
-  return stringValue;
+  const date = new Date(value);
+
+  if (!Number.isNaN(date.getTime())) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
+  return raw;
+}
+
+function normalizeTime(value) {
+  if (!value) return "-";
+
+  const raw = String(value).trim();
+
+  if (!raw || raw === "-") return "-";
+
+  const date = new Date(value);
+
+  if (!Number.isNaN(date.getTime())) {
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  return raw;
 }
 
 function formatPKR(value) {
@@ -36,7 +70,9 @@ function formatPKR(value) {
 function getStatus(attendanceRow) {
   if (!attendanceRow) return "Absent";
 
-  if (attendanceRow.LogoutTime && attendanceRow.LogoutTime !== "-") {
+  const logoutTime = normalizeTime(attendanceRow.LogoutTime);
+
+  if (logoutTime && logoutTime !== "-") {
     return "Checked Out";
   }
 
@@ -147,8 +183,8 @@ export default function ManagerReportsPage() {
         name: agent.AgentName || "Agent",
         id: agent.AgentID || "-",
         status,
-        checkIn: latestAttendance?.LoginTime || "-",
-        checkOut: latestAttendance?.LogoutTime || "-",
+        checkIn: normalizeTime(latestAttendance?.LoginTime),
+        checkOut: normalizeTime(latestAttendance?.LogoutTime),
         leads: agentLeads.length,
         approved,
         salary: Number(agent.Salary || 0),
@@ -254,7 +290,7 @@ export default function ManagerReportsPage() {
             </div>
 
             <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm font-bold text-cyan-300">
-              Google Sheets Live
+              Google Sheets Live · {today}
             </div>
           </div>
 
@@ -318,9 +354,7 @@ export default function ManagerReportsPage() {
                       <td className="px-5 py-4">{agent.checkOut}</td>
                       <td className="px-5 py-4">{agent.leads}</td>
                       <td className="px-5 py-4">{agent.approved}</td>
-                      <td className="px-5 py-4">
-                        {formatPKR(agent.salary)}
-                      </td>
+                      <td className="px-5 py-4">{formatPKR(agent.salary)}</td>
                     </tr>
                   ))
                 )}
@@ -386,8 +420,8 @@ export default function ManagerReportsPage() {
                 </h3>
 
                 <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                  This page now reads live Agents, Attendance, and Leads data.
-                  Salary preview is currently base salary for present agents.
+                  This page reads today&apos;s Agents, Attendance, and Leads
+                  data. Historical/monthly reports will be added after final QA.
                 </p>
               </div>
             </div>
