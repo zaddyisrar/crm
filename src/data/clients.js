@@ -17,4 +17,5 @@ export const clientOptions = [
   { id: 16, name: "Support Team", company: "Tetra Maintenance", phone: "+1 555 100 1016", email: "contact@tetramaintenance.com", status: "New" },
   { id: 17, name: "Management", company: "C MIC (Cheer)", phone: "+1 555 100 1017", email: "contact@cmiccheer.com", status: "New" },
   { id: 18, name: "Operations Team", company: "Summit Facility Solutions", phone: "+1 555 100 1018", email: "contact@summitfacilitysolutions.com", status: "New" },
+  { id: 19, name: "Robert McKeown", company: "Stratus Building Solutions of Palm Beach and the Treasure Coast", phone: "+1 561-469-8795", email: "rmckeown@stratusclean.com", status: "New" },
 ];
