@@ -8,10 +8,24 @@ import {
   ShieldCheck,
   Clock3,
   BadgeDollarSign,
+  Plus,
+  Pencil,
+  Trash2,
+  X,
+  Save,
 } from "lucide-react";
 
 import ManagerShell from "@/components/manager/ManagerShell";
 import { sheetsPost } from "@/lib/sheetsApi";
+
+const emptyForm = {
+  agentId: "",
+  agentName: "",
+  password: "",
+  salary: "",
+  workingHours: "8",
+  status: "Active",
+};
 
 function formatPKR(value) {
   const amount = Number(value || 0);
@@ -28,11 +42,58 @@ function statusClass(status) {
   return "border-emerald-400/20 bg-emerald-400/10 text-emerald-300";
 }
 
+function normalizeDate(value) {
+  if (!value) return "-";
+
+  const raw = String(value).trim();
+  if (!raw || raw === "-") return "-";
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  const date = new Date(value);
+
+  if (!Number.isNaN(date.getTime())) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
+  return raw;
+}
+
+function normalizeTime(value) {
+  if (!value) return "-";
+
+  const raw = String(value).trim();
+  if (!raw || raw === "-") return "-";
+
+  const date = new Date(value);
+
+  if (!Number.isNaN(date.getTime())) {
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  return raw;
+}
+
 export default function ManagerAgentsPage() {
   const [agents, setAgents] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [mode, setMode] = useState("create");
+  const [form, setForm] = useState(emptyForm);
 
   async function loadAgents(showLoader = false) {
     try {
@@ -41,10 +102,15 @@ export default function ManagerAgentsPage() {
       setError("");
 
       const response = await sheetsPost({ action: "getAgents" });
-      setAgents(response.data || []);
+
+      if (response?.success === false) {
+        throw new Error(response.message || "Failed to load agents");
+      }
+
+      setAgents(response?.data || []);
     } catch (err) {
       console.error("Manager agents sheet read failed:", err);
-      setError(err.message || "Failed to load agents from Google Sheets");
+      setError(err?.message || "Failed to load agents from Google Sheets");
       setAgents([]);
     } finally {
       if (showLoader) setLoading(false);
@@ -61,8 +127,130 @@ export default function ManagerAgentsPage() {
     return () => clearInterval(interval);
   }, []);
 
+  function openCreateModal() {
+    setMode("create");
+    setForm(emptyForm);
+    setError("");
+    setSuccess("");
+    setModalOpen(true);
+  }
+
+  function openEditModal(user) {
+    setMode("edit");
+    setForm({
+      agentId: user.AgentID || "",
+      agentName: user.AgentName || "",
+      password: user.Password || "",
+      salary: user.Salary || "",
+      workingHours: user.WorkingHours || "8",
+      status: user.Status || "Active",
+    });
+    setError("");
+    setSuccess("");
+    setModalOpen(true);
+  }
+
+  function closeModal() {
+    if (saving) return;
+
+    setModalOpen(false);
+    setForm(emptyForm);
+  }
+
+  function updateForm(key, value) {
+    setForm((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  }
+
+  async function handleSaveAgent(e) {
+    e.preventDefault();
+
+    try {
+      setSaving(true);
+      setError("");
+      setSuccess("");
+
+      const cleanAgentId = String(form.agentId || "").trim().toUpperCase();
+      const cleanAgentName = String(form.agentName || "").trim();
+      const cleanPassword = String(form.password || "").trim();
+
+      if (!cleanAgentId) throw new Error("Agent ID is required");
+      if (!cleanAgentName) throw new Error("Agent name is required");
+      if (!cleanPassword) throw new Error("Password is required");
+
+      const payload = {
+        action: mode === "create" ? "addAgent" : "updateAgent",
+        agentId: cleanAgentId,
+        agentName: cleanAgentName,
+        password: cleanPassword,
+        salary: Number(form.salary || 0),
+        workingHours: Number(form.workingHours || 8),
+        status: form.status || "Active",
+      };
+
+      const response = await sheetsPost(payload);
+
+      if (response?.success === false) {
+        throw new Error(response.message || "Failed to save agent");
+      }
+
+      setSuccess(
+        mode === "create"
+          ? "Agent created successfully."
+          : "Agent updated successfully."
+      );
+
+      setModalOpen(false);
+      setForm(emptyForm);
+
+      await loadAgents(true);
+    } catch (err) {
+      console.error("Agent save failed:", err);
+      setError(err?.message || "Failed to save agent");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeactivateAgent(user) {
+    const agentId = String(user.AgentID || "").trim().toUpperCase();
+
+    if (!agentId) return;
+
+    const confirmed = window.confirm(
+      `Deactivate ${user.AgentName || agentId}? This will block login but keep old reports safe.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setSaving(true);
+      setError("");
+      setSuccess("");
+
+      const response = await sheetsPost({
+        action: "deleteAgent",
+        agentId,
+      });
+
+      if (response?.success === false) {
+        throw new Error(response.message || "Failed to deactivate agent");
+      }
+
+      setSuccess("Agent deactivated successfully.");
+      await loadAgents(true);
+    } catch (err) {
+      console.error("Agent deactivate failed:", err);
+      setError(err?.message || "Failed to deactivate agent");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const visibleUsers = useMemo(() => {
-    const search = searchTerm.toLowerCase();
+    const search = searchTerm.toLowerCase().trim();
 
     return agents
       .filter((user) => {
@@ -70,6 +258,8 @@ export default function ManagerAgentsPage() {
         return role === "agent" || role === "manager";
       })
       .filter((user) => {
+        if (!search) return true;
+
         return (
           String(user.AgentID || "").toLowerCase().includes(search) ||
           String(user.AgentName || "").toLowerCase().includes(search) ||
@@ -88,7 +278,7 @@ export default function ManagerAgentsPage() {
   ).length;
 
   const activeCount = visibleUsers.filter(
-    (user) => String(user.Status || "").toLowerCase() === "active"
+    (user) => String(user.Status || "Active").toLowerCase() === "active"
   ).length;
 
   const totalSalary = visibleUsers
@@ -109,23 +299,43 @@ export default function ManagerAgentsPage() {
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Live read-only view from the Agents sheet.
+              Create, edit, and deactivate agent IDs from Google Sheets.
             </p>
           </div>
 
-          <button
-            onClick={() => loadAgents(true)}
-            disabled={loading}
-            className="flex items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-2.5 text-sm font-bold text-cyan-200 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <RefreshCcw size={15} className={loading ? "animate-spin" : ""} />
-            Refresh
-          </button>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button
+              onClick={openCreateModal}
+              disabled={saving}
+              className="flex items-center justify-center gap-2 rounded-xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-2.5 text-sm font-bold text-emerald-200 transition hover:bg-emerald-300/15 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Plus size={15} />
+              Create Agent
+            </button>
+
+            <button
+              onClick={() => loadAgents(true)}
+              disabled={loading || saving}
+              className="flex items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-2.5 text-sm font-bold text-cyan-200 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCcw
+                size={15}
+                className={loading ? "animate-spin" : ""}
+              />
+              Refresh
+            </button>
+          </div>
         </div>
 
         {error && (
           <div className="mb-5 rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-300">
             {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="mb-5 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-300">
+            {success}
           </div>
         )}
 
@@ -176,7 +386,7 @@ export default function ManagerAgentsPage() {
         </div>
 
         <div className="overflow-x-auto rounded-[1.5rem] border border-white/10">
-          <table className="w-full min-w-[1100px] text-left text-sm">
+          <table className="w-full min-w-[1250px] text-left text-sm">
             <thead className="bg-white/[0.04] text-xs uppercase tracking-[0.2em] text-cyan-300">
               <tr>
                 <th className="px-5 py-4">Name</th>
@@ -188,6 +398,7 @@ export default function ManagerAgentsPage() {
                 <th className="px-5 py-4">Created</th>
                 <th className="px-5 py-4">Last Login</th>
                 <th className="px-5 py-4">Hours</th>
+                <th className="px-5 py-4 text-right">Actions</th>
               </tr>
             </thead>
 
@@ -195,7 +406,7 @@ export default function ManagerAgentsPage() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan="9"
+                    colSpan="10"
                     className="px-5 py-8 text-center text-slate-500"
                   >
                     Loading users from Agents sheet...
@@ -204,69 +415,255 @@ export default function ManagerAgentsPage() {
               ) : visibleUsers.length === 0 ? (
                 <tr>
                   <td
-                    colSpan="9"
+                    colSpan="10"
                     className="px-5 py-8 text-center text-slate-500"
                   >
                     No users found.
                   </td>
                 </tr>
               ) : (
-                visibleUsers.map((user, index) => (
-                  <tr
-                    key={`${user.AgentID || "user"}-${index}`}
-                    className="border-t border-white/10 text-slate-300"
-                  >
-                    <td className="px-5 py-4 font-bold text-white">
-                      {user.AgentName || "-"}
-                    </td>
+                visibleUsers.map((user, index) => {
+                  const role = String(user.Role || "").toLowerCase();
+                  const canManage = role === "agent";
+                  const isInactive =
+                    String(user.Status || "Active").toLowerCase() ===
+                    "inactive";
 
-                    <td className="px-5 py-4 text-cyan-300">
-                      {user.AgentID || "-"}
-                    </td>
+                  return (
+                    <tr
+                      key={`${user.AgentID || "user"}-${index}`}
+                      className="border-t border-white/10 text-slate-300"
+                    >
+                      <td className="px-5 py-4 font-bold text-white">
+                        {user.AgentName || "-"}
+                      </td>
 
-                    <td className="px-5 py-4">{user.Password || "-"}</td>
+                      <td className="px-5 py-4 text-cyan-300">
+                        {user.AgentID || "-"}
+                      </td>
 
-                    <td className="px-5 py-4 capitalize">
-                      {user.Role || "-"}
-                    </td>
+                      <td className="px-5 py-4">{user.Password || "-"}</td>
 
-                    <td className="px-5 py-4">
-                      {formatPKR(user.Salary)}
-                    </td>
+                      <td className="px-5 py-4 capitalize">
+                        {user.Role || "-"}
+                      </td>
 
-                    <td className="px-5 py-4">
-                      <span
-                        className={`rounded-full border px-3 py-1 text-xs font-bold ${statusClass(
-                          user.Status
-                        )}`}
-                      >
-                        {user.Status || "Active"}
-                      </span>
-                    </td>
+                      <td className="px-5 py-4">{formatPKR(user.Salary)}</td>
 
-                    <td className="px-5 py-4 text-slate-400">
-                      {user.CreatedAt || "-"}
-                    </td>
+                      <td className="px-5 py-4">
+                        <span
+                          className={`rounded-full border px-3 py-1 text-xs font-bold ${statusClass(
+                            user.Status
+                          )}`}
+                        >
+                          {user.Status || "Active"}
+                        </span>
+                      </td>
 
-                    <td className="px-5 py-4 text-slate-400">
-                      {user.LastLogin || "-"}
-                    </td>
+                      <td className="px-5 py-4 text-slate-400">
+                        {normalizeDate(user.CreatedAt)}
+                      </td>
 
-                    <td className="px-5 py-4 text-slate-400">
-                      {user.WorkingHours || "-"}
-                    </td>
-                  </tr>
-                ))
+                      <td className="px-5 py-4 text-slate-400">
+                        {normalizeTime(user.LastLogin)}
+                      </td>
+
+                      <td className="px-5 py-4 text-slate-400">
+                        {user.WorkingHours || "-"}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => openEditModal(user)}
+                            disabled={!canManage || saving}
+                            className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-2 text-cyan-200 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-40"
+                            title={
+                              canManage
+                                ? "Edit agent"
+                                : "Managers cannot edit this account"
+                            }
+                          >
+                            <Pencil size={15} />
+                          </button>
+
+                          <button
+                            onClick={() => handleDeactivateAgent(user)}
+                            disabled={!canManage || isInactive || saving}
+                            className="rounded-xl border border-red-400/20 bg-red-400/10 p-2 text-red-300 transition hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-40"
+                            title={
+                              isInactive
+                                ? "Already inactive"
+                                : "Deactivate agent"
+                            }
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
 
         <p className="mt-4 text-xs text-slate-600">
-          Create, edit, delete, and reset password actions will be added after
-          backend write-actions are created in Apps Script.
+          Remove action uses safe deactivation. Old attendance and leads history
+          will stay protected.
         </p>
       </div>
+
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md">
+          <div className="w-full max-w-2xl rounded-[2rem] border border-cyan-300/15 bg-[#050913] p-6 shadow-2xl shadow-cyan-950/40">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.35em] text-cyan-300">
+                  {mode === "create" ? "Create Agent" : "Edit Agent"}
+                </p>
+
+                <h3 className="mt-2 text-2xl font-black text-white">
+                  {mode === "create"
+                    ? "Add New Agent ID"
+                    : `Update ${form.agentId}`}
+                </h3>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  This data writes directly to the Agents sheet.
+                </p>
+              </div>
+
+              <button
+                onClick={closeModal}
+                disabled={saving}
+                className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAgent} className="grid gap-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="Agent ID">
+                  <input
+                    value={form.agentId}
+                    onChange={(e) =>
+                      updateForm("agentId", e.target.value.toUpperCase())
+                    }
+                    disabled={mode === "edit" || saving}
+                    placeholder="e.g. AG001"
+                    className="inputBox disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </Field>
+
+                <Field label="Agent Name">
+                  <input
+                    value={form.agentName}
+                    onChange={(e) => updateForm("agentName", e.target.value)}
+                    disabled={saving}
+                    placeholder="Agent full name"
+                    className="inputBox"
+                  />
+                </Field>
+
+                <Field label="Password">
+                  <input
+                    value={form.password}
+                    onChange={(e) => updateForm("password", e.target.value)}
+                    disabled={saving}
+                    placeholder="Login password"
+                    className="inputBox"
+                  />
+                </Field>
+
+                <Field label="Salary">
+                  <input
+                    type="number"
+                    value={form.salary}
+                    onChange={(e) => updateForm("salary", e.target.value)}
+                    disabled={saving}
+                    placeholder="60000"
+                    className="inputBox"
+                  />
+                </Field>
+
+                <Field label="Working Hours">
+                  <input
+                    type="number"
+                    value={form.workingHours}
+                    onChange={(e) =>
+                      updateForm("workingHours", e.target.value)
+                    }
+                    disabled={saving}
+                    placeholder="8"
+                    className="inputBox"
+                  />
+                </Field>
+
+                <Field label="Status">
+                  <select
+                    value={form.status}
+                    onChange={(e) => updateForm("status", e.target.value)}
+                    disabled={saving}
+                    className="inputBox"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </Field>
+              </div>
+
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  disabled={saving}
+                  className="rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-bold text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-5 py-2.5 text-sm font-bold text-cyan-200 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Save size={16} />
+                  {saving ? "Saving..." : "Save Agent"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`
+        .inputBox {
+          width: 100%;
+          border-radius: 0.9rem;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: rgba(0, 0, 0, 0.25);
+          padding: 0.75rem 0.85rem;
+          font-size: 0.875rem;
+          color: white;
+          outline: none;
+        }
+
+        .inputBox::placeholder {
+          color: rgb(71 85 105);
+        }
+
+        .inputBox:focus {
+          border-color: rgba(103, 232, 249, 0.35);
+        }
+
+        select.inputBox option {
+          background: #050913;
+          color: white;
+        }
+      `}</style>
     </ManagerShell>
   );
 }
@@ -281,5 +678,16 @@ function MiniCard({ title, value, icon: Icon, tone }) {
       <p className="text-xl font-black text-white">{value}</p>
       <p className="mt-1 text-xs text-slate-400">{title}</p>
     </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label className="block">
+      <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+        {label}
+      </p>
+      {children}
+    </label>
   );
 }

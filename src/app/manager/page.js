@@ -12,6 +12,24 @@ import {
   RefreshCcw,
 } from "lucide-react";
 
+function normalizeTime(value) {
+  if (!value) return "-";
+
+  const raw = String(value).trim();
+  if (!raw || raw === "-") return "-";
+
+  const date = new Date(value);
+
+  if (!Number.isNaN(date.getTime())) {
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  return raw;
+}
+
 function statusBadgeClass(status) {
   const cleanStatus = String(status || "Pending").toLowerCase();
 
@@ -40,18 +58,19 @@ export default function ManagerDashboardPage() {
 
       setError("");
 
-      const agentsResponse = await sheetsPost({ action: "getAgents" });
-      const leadsResponse = await sheetsPost({ action: "getLeads" });
-      const attendanceResponse = await sheetsPost({
-        action: "getAttendance",
-      });
+      const [agentsResponse, leadsResponse, attendanceResponse] =
+        await Promise.all([
+          sheetsPost({ action: "getAgents" }),
+          sheetsPost({ action: "getLeads" }),
+          sheetsPost({ action: "getAttendance" }),
+        ]);
 
-      setAgentRows(agentsResponse.data || []);
-      setLeadRows(leadsResponse.data || []);
-      setAttendanceRows(attendanceResponse.data || []);
+      setAgentRows(agentsResponse?.data || []);
+      setLeadRows(leadsResponse?.data || []);
+      setAttendanceRows(attendanceResponse?.data || []);
     } catch (err) {
       console.error("Manager dashboard sheet read failed:", err);
-      setError(err.message || "Failed to load manager dashboard data");
+      setError(err?.message || "Failed to load manager dashboard data");
       setAgentRows([]);
       setLeadRows([]);
       setAttendanceRows([]);
@@ -71,34 +90,32 @@ export default function ManagerDashboardPage() {
   }, []);
 
   const agents = useMemo(() => {
-    return agentRows.filter(
-      (user) => String(user.Role || "").toLowerCase() === "agent"
-    );
+    return agentRows.filter((user) => {
+      const role = String(user.Role || "").toLowerCase();
+      const status = String(user.Status || "Active").toLowerCase();
+
+      return role === "agent" && status !== "inactive";
+    });
   }, [agentRows]);
 
   const pendingLeads = useMemo(() => {
-    return leadRows.filter(
-      (lead) => String(lead.ApprovalStatus || "").toLowerCase() === "pending"
-    );
-  }, [leadRows]);
-
-  const approvedLeads = useMemo(() => {
-    return leadRows.filter(
-      (lead) => String(lead.ApprovalStatus || "").toLowerCase() === "approved"
-    );
+    return leadRows.filter((lead) => {
+      const status = String(lead.ApprovalStatus || "Pending").toLowerCase();
+      return status === "pending";
+    });
   }, [leadRows]);
 
   const recentLeadActivity = useMemo(() => {
     return [...leadRows]
-      .slice()
       .reverse()
       .slice(0, 8)
-      .map((lead) => ({
+      .map((lead, index) => ({
+        id: `${lead.AgentID || "agent"}-${lead.LeadName || "lead"}-${index}`,
         agent: lead.AgentName || lead.AgentID || "-",
         lead: lead.LeadName || "-",
         company: lead.Company || "-",
         status: lead.ApprovalStatus || "Pending",
-        time: lead.Time || "-",
+        time: normalizeTime(lead.Time),
       }));
   }, [leadRows]);
 
@@ -123,7 +140,7 @@ export default function ManagerDashboardPage() {
 
       <div className="grid gap-5 md:grid-cols-3">
         <StatCard
-          title="Total Agents"
+          title="Active Agents"
           value={loading ? "..." : agents.length}
           subtitle="Registered active agents"
           icon={Users}
@@ -137,15 +154,15 @@ export default function ManagerDashboardPage() {
         />
 
         <StatCard
-          title="Reports"
+          title="Attendance Records"
           value={loading ? "..." : attendanceRows.length}
-          subtitle="Attendance rows tracked"
+          subtitle="Rows tracked in Attendance sheet"
           icon={FileBarChart}
         />
       </div>
 
       <div className="mt-6 rounded-[2rem] border border-cyan-300/15 bg-white/[0.03] p-6 backdrop-blur-xl">
-        <div className="mb-5 flex items-center justify-between">
+        <div className="mb-5 flex items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.35em] text-cyan-300">
               Live Leads Activity
@@ -165,7 +182,7 @@ export default function ManagerDashboardPage() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-white/10">
+        <div className="overflow-hidden overflow-x-auto rounded-2xl border border-white/10">
           <table className="w-full min-w-[850px] text-left text-sm">
             <thead className="bg-white/[0.04] text-xs uppercase tracking-[0.22em] text-cyan-300">
               <tr>
@@ -197,9 +214,9 @@ export default function ManagerDashboardPage() {
                   </td>
                 </tr>
               ) : (
-                recentLeadActivity.map((lead, index) => (
+                recentLeadActivity.map((lead) => (
                   <tr
-                    key={`${lead.agent}-${lead.lead}-${lead.time}-${index}`}
+                    key={lead.id}
                     className="border-t border-white/10 text-slate-300"
                   >
                     <td className="px-5 py-4 font-bold text-white">
