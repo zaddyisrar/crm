@@ -5,11 +5,8 @@ import { sheetsPost } from "@/lib/sheetsApi";
 
 const AUTO_LOGOUT_ENABLED = true;
 
-// Testing mode: 8 hours
-const INACTIVITY_LIMIT = 8 * 60 * 60 * 1000;
-
-// Later production option:
-// const INACTIVITY_LIMIT = 30 * 60 * 1000;
+// Production: 3 minutes
+const INACTIVITY_LIMIT = 5 * 60 * 1000;
 
 export default function AutoLogout() {
   useEffect(() => {
@@ -26,19 +23,19 @@ export default function AutoLogout() {
     const logoutUser = async () => {
       try {
         await sheetsPost({
-          action: "attendanceLogout",
+          action: "autoLogout",
           agentId: userId,
           agentName: userName || userId,
         });
       } catch (error) {
-        console.error("Auto logout attendance logout failed:", error);
+        console.error("Auto logout failed:", error);
       }
 
       localStorage.removeItem("crmRole");
       localStorage.removeItem("crmUserId");
       localStorage.removeItem("crmUserName");
 
-      window.location.href = "/login";
+      window.location.href = "/login?reason=inactive";
     };
 
     const resetTimer = () => {

@@ -1,65 +1,197 @@
 "use client";
 
-import AutoLogout from "@/components/crm/AutoLogout";
 import PageShell from "@/components/crm/PageShell";
-import { useEffect, useState } from "react";
+import { sheetsPost } from "@/lib/sheetsApi";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Clock3,
-  UserCheck,
+  Activity,
+  AlertTriangle,
+  CalendarCheck,
   CalendarClock,
-  Coffee,
-  Bath,
-  BriefcaseBusiness,
-  LogOut,
   CalendarDays,
+  Clock3,
+  TimerOff,
+  UserCheck,
+  XCircle,
 } from "lucide-react";
 
+const LATE_LIMIT_HOUR = 19;
+const LATE_LIMIT_MINUTE = 10;
+
 function getTodayKey() {
-  return new Date().toISOString().split("T")[0];
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
-function formatAgentName(value) {
-  if (!value) return "Agent";
+function normalizeDate(value) {
+  if (!value) return "";
+  const raw = String(value).trim();
 
-  return value
-    .replace(/^LR-/i, "")
-    .replace(/[-_]/g, " ")
-    .toLowerCase()
-    .replace(/\b\w/g, (l) => l.toUpperCase());
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  const date = new Date(value);
+
+  if (!Number.isNaN(date.getTime())) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
+  return raw;
 }
 
-function getWorkDuration(checkInTime) {
-  if (!checkInTime || checkInTime === "-") return "0h 0m";
+function normalizeTime(value) {
+  if (!value) return "-";
+  const raw = String(value).trim();
 
-  const now = new Date();
-  const checkIn = new Date();
+  if (!raw || raw === "-") return "-";
 
-  const [time, modifier] = checkInTime.split(" ");
-  let [hours, minutes] = time.split(":").map(Number);
+  const date = new Date(value);
 
-  if (modifier === "PM" && hours !== 12) hours += 12;
-  if (modifier === "AM" && hours === 12) hours = 0;
+  if (!Number.isNaN(date.getTime())) {
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
 
-  checkIn.setHours(hours);
-  checkIn.setMinutes(minutes);
-  checkIn.setSeconds(0);
+  return raw;
+}
 
-  if (checkIn > now) checkIn.setDate(checkIn.getDate() - 1);
+function parseTimeToMinutes(value) {
+  const time = normalizeTime(value);
 
-  const diff = now - checkIn;
-  const total = Math.floor(diff / 1000 / 60);
+  if (!time || time === "-") return null;
 
-  return `${Math.floor(total / 60)}h ${total % 60}m`;
+  const match = time.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+
+  if (!match) return null;
+
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const meridian = match[3]?.toUpperCase();
+
+  if (meridian === "PM" && hour !== 12) hour += 12;
+  if (meridian === "AM" && hour === 12) hour = 0;
+
+  return hour * 60 + minute;
+}
+
+function formatMinutes(value) {
+  const minutes = Number(value || 0);
+
+  if (!minutes || minutes < 0) return "0m";
+
+  const hrs = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+
+  if (!hrs) return `${mins}m`;
+  return `${hrs}h ${mins}m`;
+}
+
+function getMonthKey(dateKey = getTodayKey()) {
+  return dateKey.slice(0, 7);
+}
+
+function getMonthDays(monthKey) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const totalDays = new Date(year, month, 0).getDate();
+
+  return Array.from({ length: totalDays }, (_, index) => {
+    const day = index + 1;
+    const date = new Date(year, month - 1, day);
+    const dateKey = `${year}-${String(month).padStart(2, "0")}-${String(
+      day
+    ).padStart(2, "0")}`;
+
+    return {
+      day,
+      date,
+      dateKey,
+      weekday: date.getDay(),
+    };
+  });
+}
+
+function isWeekend(dayInfo) {
+  return dayInfo.weekday === 0 || dayInfo.weekday === 6;
+}
+
+function isLate(loginTime) {
+  const minutes = parseTimeToMinutes(loginTime);
+
+  if (minutes === null) return false;
+
+  const lateLimit = LATE_LIMIT_HOUR * 60 + LATE_LIMIT_MINUTE;
+
+  return minutes > lateLimit;
+}
+
+function getDayStatus(dayInfo, attendanceRow) {
+  const today = getTodayKey();
+
+  if (isWeekend(dayInfo)) return "Off";
+
+  if (dayInfo.dateKey > today) return "Upcoming";
+
+  if (!attendanceRow) return "Absent";
+
+  if (isLate(attendanceRow.LoginTime)) return "Late";
+
+  return "Present";
+}
+
+function pickLatestRowsByDate(rows) {
+  const map = new Map();
+
+  rows.forEach((row) => {
+    const date = normalizeDate(row.Date);
+    if (!date) return;
+
+    map.set(date, row);
+  });
+
+  return map;
 }
 
 export default function AttendancePage() {
   const [agentId, setAgentId] = useState("");
   const [agentName, setAgentName] = useState("Agent");
-  const [checkIn, setCheckIn] = useState("-");
-  const [checkOut, setCheckOut] = useState("-");
-  const [hours, setHours] = useState("0h 0m");
-  const [status, setStatus] = useState("Absent");
-  const [currentStatus, setCurrentStatus] = useState("Active");
+  const [attendanceRows, setAttendanceRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const today = getTodayKey();
+  const monthKey = getMonthKey(today);
+
+  async function loadAttendance(userId = agentId) {
+    if (!userId) return;
+
+    try {
+      setLoading(true);
+
+      const response = await sheetsPost({ action: "getAttendance" });
+      const rows = response.data || [];
+
+      const agentRows = rows.filter(
+        (row) =>
+          String(row.AgentID || "").toUpperCase() ===
+          String(userId || "").toUpperCase()
+      );
+
+      setAttendanceRows(agentRows);
+    } catch (error) {
+      console.error("Agent attendance read failed:", error);
+      setAttendanceRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     const userId = localStorage.getItem("crmUserId");
@@ -68,204 +200,285 @@ export default function AttendancePage() {
     if (!userId) return;
 
     setAgentId(userId);
-    setAgentName(userName || formatAgentName(userId));
+    setAgentName(userName || "Agent");
 
-    const today = getTodayKey();
+    loadAttendance(userId);
 
-    const savedStatus =
-      localStorage.getItem(`crmCurrentStatus:${userId}`) || "Active";
+    const interval = setInterval(() => {
+      loadAttendance(userId);
+    }, 10000);
 
-    const checkInDate = localStorage.getItem(`crmCheckInDate:${userId}`);
-    const inTime = localStorage.getItem(`crmCheckInTime:${userId}`);
-    const checkedOutDate = localStorage.getItem(`crmCheckedOutDate:${userId}`);
-    const outTime = localStorage.getItem(`crmCheckOutTime:${userId}`);
-
-    setCurrentStatus(savedStatus);
-
-    if (checkInDate === today) {
-      setCheckIn(inTime || "-");
-      setHours(getWorkDuration(inTime));
-      setStatus(checkedOutDate === today ? "Checked Out" : "Present");
-
-      if (checkedOutDate === today) setCheckOut(outTime || "-");
-    }
-
-    function syncStatus() {
-      const nextStatus =
-        localStorage.getItem(`crmCurrentStatus:${userId}`) || "Active";
-      setCurrentStatus(nextStatus);
-    }
-
-    window.addEventListener("crm-status-change", syncStatus);
-
-    return () => {
-      window.removeEventListener("crm-status-change", syncStatus);
-    };
+    return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (!checkIn || checkIn === "-") return;
+  const monthlyRows = useMemo(() => {
+    return attendanceRows.filter((row) => normalizeDate(row.Date).startsWith(monthKey));
+  }, [attendanceRows, monthKey]);
 
-    const timer = setInterval(() => {
-      setHours(getWorkDuration(checkIn));
-    }, 60000);
+  const rowsByDate = useMemo(() => {
+    return pickLatestRowsByDate(monthlyRows);
+  }, [monthlyRows]);
 
-    return () => clearInterval(timer);
-  }, [checkIn]);
+  const monthDays = useMemo(() => {
+    return getMonthDays(monthKey);
+  }, [monthKey]);
+
+  const todayRow = rowsByDate.get(today) || null;
+
+  const todayStatus = todayRow
+    ? todayRow.Status || "Active"
+    : isWeekend({
+        weekday: new Date().getDay(),
+      })
+    ? "Off"
+    : "Absent";
+
+  const checkIn = normalizeTime(todayRow?.LoginTime);
+  const workHours = formatMinutes(todayRow?.TotalScreenMinutes);
+
+  const report = useMemo(() => {
+    let present = 0;
+    let late = 0;
+    let absent = 0;
+    let off = 0;
+    let autoLogouts = 0;
+    let totalScreen = 0;
+    let totalInactive = 0;
+
+    monthDays.forEach((dayInfo) => {
+      const row = rowsByDate.get(dayInfo.dateKey);
+      const status = getDayStatus(dayInfo, row);
+
+      if (status === "Present") present += 1;
+      if (status === "Late") late += 1;
+      if (status === "Absent") absent += 1;
+      if (status === "Off") off += 1;
+
+      if (row?.LastAutoLogout) autoLogouts += 1;
+
+      totalScreen += Number(row?.TotalScreenMinutes || 0);
+      totalInactive += Number(row?.TotalInactiveMinutes || 0);
+    });
+
+    return {
+      present,
+      late,
+      absent,
+      off,
+      autoLogouts,
+      totalScreen,
+      totalInactive,
+    };
+  }, [monthDays, rowsByDate]);
 
   return (
-    <>
-      <AutoLogout />
-
-      <PageShell title="Attendance" subtitle="Live shift tracking">
-        <div className="origin-top-left scale-[0.9] w-[111.11%]">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <StatusBadge status={currentStatus} />
-
-            <div className="rounded-2xl border border-cyan-300/15 bg-[#071018]/80 px-4 py-2 text-sm font-bold text-slate-300">
-              Agent ID: <span className="text-cyan-300">{agentId || "-"}</span>
-            </div>
+    <PageShell title="Attendance" subtitle={`Monthly report for ${agentName}`}>
+      <div className="origin-top-left scale-[0.9] w-[111.11%]">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.35em] text-cyan-300">
+              Agent Attendance
+            </p>
+            <h2 className="mt-2 text-2xl font-black text-white">
+              {agentName}
+            </h2>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-3">
-            <StatBox
-              title="Status"
-              value={status}
-              sub="Today attendance"
-              icon={UserCheck}
+          <div className="rounded-2xl border border-cyan-300/15 bg-[#071018]/80 px-4 py-2 text-sm font-bold text-slate-300">
+            Agent ID: <span className="text-cyan-300">{agentId || "-"}</span>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <StatBox
+            title="Status"
+            value={todayStatus}
+            sub="Current attendance state"
+            icon={UserCheck}
+            tone={todayStatus === "Absent" ? "red" : todayStatus === "Late" ? "yellow" : "emerald"}
+          />
+
+          <StatBox
+            title="Check In"
+            value={checkIn}
+            sub="From Google Sheets"
+            icon={Clock3}
+            tone="cyan"
+          />
+
+          <StatBox
+            title="Work Hours"
+            value={workHours}
+            sub="Total screen time"
+            icon={CalendarClock}
+            tone="yellow"
+          />
+        </div>
+
+        <section className="mt-4 rounded-[2rem] border border-cyan-300/15 bg-[#071018]/80 p-5 backdrop-blur-xl">
+          <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.35em] text-cyan-300">
+                Monthly Attendance Report
+              </p>
+
+              <h2 className="mt-2 text-xl font-black text-white">
+                {monthKey}
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Saturday and Sunday are counted as off days. Late starts after 7:10 PM.
+              </p>
+            </div>
+
+            <button
+              onClick={() => loadAttendance(agentId)}
+              disabled={loading}
+              className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-300/15 disabled:opacity-60"
+            >
+              {loading ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+            <MiniReportCard
+              title="Present"
+              value={report.present}
+              icon={CalendarCheck}
               tone="emerald"
             />
 
-            <StatBox
-              title="Check In"
-              value={checkIn}
-              sub="Auto from login"
-              icon={Clock3}
+            <MiniReportCard
+              title="Late"
+              value={report.late}
+              icon={AlertTriangle}
+              tone="yellow"
+            />
+
+            <MiniReportCard
+              title="Absent"
+              value={report.absent}
+              icon={XCircle}
+              tone="red"
+            />
+
+            <MiniReportCard
+              title="Off"
+              value={report.off}
+              icon={CalendarDays}
+              tone="slate"
+            />
+
+            <MiniReportCard
+              title="Screen Time"
+              value={formatMinutes(report.totalScreen)}
+              icon={Activity}
               tone="cyan"
             />
 
-            <StatBox
-              title="Work Hours"
-              value={hours}
-              sub="Live tracking"
-              icon={CalendarClock}
-              tone="yellow"
+            <MiniReportCard
+              title="Inactive"
+              value={formatMinutes(report.totalInactive)}
+              icon={TimerOff}
+              tone="purple"
             />
           </div>
 
-          <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_0.8fr]">
-            <section className="rounded-[2rem] border border-cyan-300/15 bg-[#071018]/80 p-5 backdrop-blur-xl">
-              <div className="mb-5">
-                <p className="text-xs uppercase tracking-[0.35em] text-cyan-300">
-                  Agent Shift
-                </p>
+          <div className="mt-5 overflow-hidden rounded-2xl border border-white/10">
+            <div className="grid grid-cols-7 bg-white/[0.04] text-center text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                <div key={day} className="border-r border-white/10 px-3 py-3 last:border-r-0">
+                  {day}
+                </div>
+              ))}
+            </div>
 
-                <h2 className="mt-2 text-3xl font-black text-white">
-                  {agentName}
-                </h2>
+            <div className="grid grid-cols-7">
+              {Array.from({ length: monthDays[0]?.weekday || 0 }).map((_, index) => (
+                <div key={`blank-${index}`} className="min-h-[86px] border-r border-t border-white/10 bg-black/10 last:border-r-0" />
+              ))}
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Current work session details.
-                </p>
-              </div>
+              {monthDays.map((dayInfo) => {
+                const row = rowsByDate.get(dayInfo.dateKey);
+                const dayStatus = getDayStatus(dayInfo, row);
+                const style = statusStyle(dayStatus);
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <ShiftCard label="Check In" value={checkIn} icon={Clock3} />
-                <ShiftCard label="Check Out" value={checkOut} icon={LogOut} />
-                <ShiftCard label="Shift Date" value="Today" icon={CalendarDays} />
-                <ShiftCard
-                  label="Live Status"
-                  value={
-                    currentStatus === "Break"
-                      ? "On Break"
-                      : currentStatus === "Washroom"
-                      ? "Washroom"
-                      : "Active"
-                  }
-                  icon={
-                    currentStatus === "Break"
-                      ? Coffee
-                      : currentStatus === "Washroom"
-                      ? Bath
-                      : BriefcaseBusiness
-                  }
-                />
-              </div>
-            </section>
+                return (
+                  <div
+                    key={dayInfo.dateKey}
+                    className="min-h-[86px] border-r border-t border-white/10 bg-black/20 p-3 last:border-r-0"
+                  >
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <span className="text-sm font-black text-white">
+                        {String(dayInfo.day).padStart(2, "0")}
+                      </span>
 
-            <section className="rounded-[2rem] border border-cyan-300/15 bg-[#071018]/80 p-5 backdrop-blur-xl">
-              <div className="mb-5">
-                <p className="text-xs uppercase tracking-[0.35em] text-cyan-300">
-                  Shift Rules
-                </p>
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${style.badge}`}
+                      >
+                        {dayStatus}
+                      </span>
+                    </div>
 
-                <h2 className="mt-2 text-xl font-black text-white">
-                  Call Center Timings
-                </h2>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Fixed schedule for agent operations.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <Rule title="Shift Opens" time="7:00 PM" />
-                <Rule title="Tea Break" time="9:15 PM - 9:30 PM" />
-                <Rule title="Dinner Break" time="12:00 AM - 12:30 AM" />
-                <Rule title="Tea Break" time="2:45 AM - 3:00 AM" />
-              </div>
-            </section>
+                    <div className="space-y-1 text-[10px] text-slate-500">
+                      <p>
+                        In:{" "}
+                        <span className="text-slate-300">
+                          {normalizeTime(row?.LoginTime)}
+                        </span>
+                      </p>
+                      <p>
+                        Out:{" "}
+                        <span className="text-slate-300">
+                          {normalizeTime(row?.LogoutTime)}
+                        </span>
+                      </p>
+                      <p>
+                        Work:{" "}
+                        <span className="text-cyan-300">
+                          {formatMinutes(row?.TotalScreenMinutes)}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          <section className="mt-4 rounded-[2rem] border border-white/10 bg-[#071018]/80 p-5 backdrop-blur-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-[0.35em] text-cyan-300">
-                  History
-                </p>
-
-                <h2 className="mt-2 text-xl font-black text-white">
-                  Attendance Preview
-                </h2>
-              </div>
-
-              <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-bold text-cyan-300">
-                Frontend Only
-              </span>
-            </div>
-
-            <div className="overflow-hidden rounded-2xl border border-white/10">
-              <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="bg-white/[0.04] text-xs uppercase tracking-[0.22em] text-cyan-300">
-                  <tr>
-                    <th className="px-4 py-3">Date</th>
-                    <th className="px-4 py-3">Check In</th>
-                    <th className="px-4 py-3">Check Out</th>
-                    <th className="px-4 py-3">Hours</th>
-                    <th className="px-4 py-3">Status</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  <tr className="border-t border-white/10 text-slate-300">
-                    <td className="px-4 py-4 font-bold text-white">Today</td>
-                    <td className="px-4 py-4">{checkIn}</td>
-                    <td className="px-4 py-4">{checkOut}</td>
-                    <td className="px-4 py-4 text-cyan-300">{hours}</td>
-                    <td className="px-4 py-4">
-                      <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-bold text-emerald-300">
-                        {status}
-                      </span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </div>
-      </PageShell>
-    </>
+          <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold">
+            <Legend label="Present" tone="emerald" />
+            <Legend label="Late" tone="yellow" />
+            <Legend label="Absent" tone="red" />
+            <Legend label="Off" tone="slate" />
+            <Legend label="Upcoming" tone="cyan" />
+          </div>
+        </section>
+      </div>
+    </PageShell>
   );
+}
+
+function statusStyle(status) {
+  const styles = {
+    Present: {
+      badge: "border-emerald-300/20 bg-emerald-300/10 text-emerald-300",
+    },
+    Late: {
+      badge: "border-yellow-300/20 bg-yellow-300/10 text-yellow-300",
+    },
+    Absent: {
+      badge: "border-red-300/20 bg-red-300/10 text-red-300",
+    },
+    Off: {
+      badge: "border-slate-300/20 bg-slate-300/10 text-slate-300",
+    },
+    Upcoming: {
+      badge: "border-cyan-300/20 bg-cyan-300/10 text-cyan-300",
+    },
+  };
+
+  return styles[status] || styles.Upcoming;
 }
 
 function StatBox({ title, value, sub, icon: Icon, tone }) {
@@ -273,6 +486,7 @@ function StatBox({ title, value, sub, icon: Icon, tone }) {
     emerald: "border-emerald-300/20 bg-emerald-300/10 text-emerald-300",
     cyan: "border-cyan-300/20 bg-cyan-300/10 text-cyan-300",
     yellow: "border-yellow-300/20 bg-yellow-300/10 text-yellow-300",
+    red: "border-red-300/20 bg-red-300/10 text-red-300",
   };
 
   return (
@@ -293,65 +507,45 @@ function StatBox({ title, value, sub, icon: Icon, tone }) {
   );
 }
 
-function ShiftCard({ label, value, icon: Icon }) {
+function MiniReportCard({ title, value, icon: Icon, tone }) {
+  const colors = {
+    emerald: "border-emerald-300/20 bg-emerald-300/10 text-emerald-300",
+    yellow: "border-yellow-300/20 bg-yellow-300/10 text-yellow-300",
+    red: "border-red-300/20 bg-red-300/10 text-red-300",
+    slate: "border-slate-300/20 bg-slate-300/10 text-slate-300",
+    cyan: "border-cyan-300/20 bg-cyan-300/10 text-cyan-300",
+    purple: "border-purple-300/20 bg-purple-300/10 text-purple-300",
+  };
+
   return (
     <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
       <div className="mb-3 flex items-center justify-between">
-        <p className="text-xs uppercase tracking-[0.22em] text-slate-500">
-          {label}
+        <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+          {title}
         </p>
 
-        <div className="rounded-xl bg-cyan-300/10 p-2 text-cyan-300">
-          <Icon size={16} />
+        <div className={`rounded-xl border p-2 ${colors[tone]}`}>
+          <Icon size={15} />
         </div>
       </div>
 
-      <p className="text-xl font-black text-white">{value}</p>
+      <p className="text-2xl font-black text-white">{value}</p>
     </div>
   );
 }
 
-function Rule({ title, time }) {
-  return (
-    <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/25 px-4 py-3">
-      <div className="flex items-center gap-3">
-        <Coffee size={15} className="text-cyan-300" />
-        <p className="text-sm font-bold text-white">{title}</p>
-      </div>
-
-      <p className="text-sm font-bold text-cyan-300">{time}</p>
-    </div>
-  );
-}
-
-function StatusBadge({ status }) {
-  const config = {
-    Active: {
-      label: "Active",
-      className: "border-emerald-300/20 bg-emerald-300/10 text-emerald-300",
-      icon: BriefcaseBusiness,
-    },
-    Break: {
-      label: "On Break",
-      className: "border-yellow-300/20 bg-yellow-300/10 text-yellow-300",
-      icon: Coffee,
-    },
-    Washroom: {
-      label: "Washroom",
-      className: "border-purple-300/20 bg-purple-300/10 text-purple-300",
-      icon: Bath,
-    },
+function Legend({ label, tone }) {
+  const colors = {
+    emerald: "border-emerald-300/20 bg-emerald-300/10 text-emerald-300",
+    yellow: "border-yellow-300/20 bg-yellow-300/10 text-yellow-300",
+    red: "border-red-300/20 bg-red-300/10 text-red-300",
+    slate: "border-slate-300/20 bg-slate-300/10 text-slate-300",
+    cyan: "border-cyan-300/20 bg-cyan-300/10 text-cyan-300",
   };
 
-  const item = config[status] || config.Active;
-  const Icon = item.icon;
-
   return (
-    <div
-      className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-bold ${item.className}`}
-    >
-      <Icon size={16} />
-      Current Status: {item.label}
-    </div>
+    <span className={`rounded-full border px-3 py-1 ${colors[tone]}`}>
+      {label}
+    </span>
   );
 }

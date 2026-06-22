@@ -15,7 +15,13 @@ import {
 } from "lucide-react";
 
 function getTodayKey() {
-  return new Date().toISOString().split("T")[0];
+  const date = new Date();
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function getTimeNow() {
@@ -70,7 +76,7 @@ export default function LoginPage() {
       const foundUser = loginResponse.user;
 
       if (!foundUser) {
-        setError("Invalid ID, password, or role.");
+        setError(loginResponse.message || "Invalid ID, password, or role.");
         setLoading(false);
         return;
       }
@@ -80,41 +86,21 @@ export default function LoginPage() {
       const finalUserName = foundUser.agentName || "User";
 
       if (finalRole === "agent") {
-        const checkedOutDate = localStorage.getItem(
-          `crmCheckedOutDate:${finalUserId}`
-        );
+        const loginTime = getTimeNow();
 
-        if (checkedOutDate === today) {
-          setError("You already logged out today.");
+        const attendanceResponse = await sheetsPost({
+          action: "attendanceLogin",
+          agentId: finalUserId,
+          agentName: finalUserName,
+          date: today,
+          loginTime,
+          status: "Active",
+        });
+
+        if (!attendanceResponse.success) {
+          setError(attendanceResponse.message || "Attendance login failed.");
           setLoading(false);
           return;
-        }
-
-        const previousLoginDate = localStorage.getItem(
-          `crmCheckInDate:${finalUserId}`
-        );
-
-        if (previousLoginDate !== today) {
-          localStorage.removeItem(`crmCheckInTime:${finalUserId}`);
-          localStorage.removeItem(`crmCheckOutTime:${finalUserId}`);
-          localStorage.removeItem(`crmCheckedOutDate:${finalUserId}`);
-        }
-
-        if (!localStorage.getItem(`crmCheckInTime:${finalUserId}`)) {
-          const loginTime = getTimeNow();
-
-          localStorage.setItem(`crmCheckInTime:${finalUserId}`, loginTime);
-          localStorage.setItem(`crmCheckInDate:${finalUserId}`, today);
-          localStorage.setItem(`crmCurrentStatus:${finalUserId}`, "Active");
-
-          await sheetsPost({
-            action: "attendanceLogin",
-            agentId: finalUserId,
-            agentName: finalUserName,
-            date: today,
-            loginTime,
-            status: "Active",
-          });
         }
       }
 
@@ -151,13 +137,9 @@ export default function LoginPage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#02070c] text-white">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(34,211,238,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.045)_1px,transparent_1px)] bg-[size:70px_70px]" />
-
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_28%_45%,rgba(34,211,238,0.18),transparent_35%),radial-gradient(circle_at_78%_45%,rgba(34,211,238,0.08),transparent_34%)]" />
-
       <div className="absolute inset-0 bg-[radial-gradient(circle,rgba(34,211,238,0.75)_1px,transparent_1px)] bg-[size:165px_165px] opacity-35" />
-
       <div className="absolute bottom-[-130px] left-[-60px] h-[300px] w-[650px] rounded-[50%] border border-cyan-300/60 bg-cyan-400/5 shadow-[0_0_70px_rgba(34,211,238,0.32)]" />
-
       <div className="absolute bottom-0 left-[42%] top-0 hidden w-px bg-cyan-300/35 shadow-[0_0_30px_rgba(34,211,238,0.7)] lg:block" />
 
       <div className="relative grid min-h-screen lg:grid-cols-[47%_53%]">
