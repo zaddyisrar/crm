@@ -10,6 +10,7 @@ import {
   Coffee,
   Bath,
   BriefcaseBusiness,
+  BarChart3,
 } from "lucide-react";
 
 import { sheetsPost } from "@/lib/sheetsApi";
@@ -21,6 +22,11 @@ const navItems = [
     icon: LayoutDashboard,
   },
   {
+    name: "Analytics",
+    href: "/analytics",
+    icon: BarChart3,
+  },
+  {
     name: "Attendance",
     href: "/attendance",
     icon: Clock3,
@@ -28,7 +34,13 @@ const navItems = [
 ];
 
 function getTodayKey() {
-  return new Date().toISOString().split("T")[0];
+  const date = new Date();
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function getTimeNow() {
@@ -42,7 +54,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
 
-  async function updateAgentStatus(status) {
+  function updateAgentStatus(status) {
     const userId = localStorage.getItem("crmUserId");
     const role = localStorage.getItem("crmRole");
 
@@ -51,17 +63,13 @@ export default function Sidebar() {
     localStorage.setItem(`crmCurrentStatus:${userId}`, status);
     window.dispatchEvent(new Event("crm-status-change"));
 
-    try {
-      await sheetsPost({
-        action: "updateStatus",
-        agentId: userId,
-        status,
-      });
-
-      console.log(`Status updated: ${status}`);
-    } catch (error) {
+    sheetsPost({
+      action: "updateStatus",
+      agentId: userId,
+      status,
+    }).catch((error) => {
       console.error("Google Sheets status update failed:", error);
-    }
+    });
   }
 
   async function handleLogout() {
@@ -75,15 +83,14 @@ export default function Sidebar() {
       localStorage.setItem(`crmCheckOutTime:${userId}`, checkOutTime);
       localStorage.setItem(`crmCheckedOutDate:${userId}`, today);
       localStorage.setItem(`crmCurrentStatus:${userId}`, "Checked Out");
+      window.dispatchEvent(new Event("crm-status-change"));
 
       try {
         await sheetsPost({
-  action: "attendanceLogout",
-  agentId: userId,
-  logoutTime: checkOutTime,
-});
-
-        console.log("Check-out synced to Google Sheets");
+          action: "attendanceLogout",
+          agentId: userId,
+          logoutTime: checkOutTime,
+        });
       } catch (error) {
         console.error("Google Sheets check-out failed:", error);
       }
