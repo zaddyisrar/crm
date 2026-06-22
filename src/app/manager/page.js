@@ -7,10 +7,42 @@ import { sheetsPost } from "@/lib/sheetsApi";
 import {
   Users,
   ClipboardCheck,
-  FileBarChart,
   Activity,
   RefreshCcw,
+  LogOut,
+  Bath,
+  Video,
 } from "lucide-react";
+
+function getTodayKey() {
+  const date = new Date();
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeDate(value) {
+  if (!value) return "";
+
+  const raw = String(value).trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  const date = new Date(value);
+
+  if (!Number.isNaN(date.getTime())) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
+  return raw;
+}
 
 function normalizeTime(value) {
   if (!value) return "-";
@@ -84,10 +116,13 @@ export default function ManagerDashboardPage() {
 
     const interval = setInterval(() => {
       loadManagerData(false);
-    }, 15000);
+    }, 10000);
 
     return () => clearInterval(interval);
   }, []);
+
+  const todayKey = getTodayKey();
+  const monthKey = todayKey.slice(0, 7);
 
   const agents = useMemo(() => {
     return agentRows.filter((user) => {
@@ -98,12 +133,73 @@ export default function ManagerDashboardPage() {
     });
   }, [agentRows]);
 
+  const todayAttendanceRows = useMemo(() => {
+    return attendanceRows.filter((row) => normalizeDate(row.Date) === todayKey);
+  }, [attendanceRows, todayKey]);
+
+  const activeAgentsToday = useMemo(() => {
+    const activeIds = new Set();
+
+    todayAttendanceRows.forEach((row) => {
+      const status = String(row.Status || "").toLowerCase();
+      const agentId = String(row.AgentID || "").toUpperCase();
+
+      if (!agentId) return;
+
+      if (status && status !== "checked out" && status !== "auto logged out") {
+        activeIds.add(agentId);
+      }
+    });
+
+    return activeIds.size;
+  }, [todayAttendanceRows]);
+
+  const monthlyLeads = useMemo(() => {
+    return leadRows.filter((lead) => normalizeDate(lead.Date).slice(0, 7) === monthKey);
+  }, [leadRows, monthKey]);
+
   const pendingLeads = useMemo(() => {
     return leadRows.filter((lead) => {
       const status = String(lead.ApprovalStatus || "Pending").toLowerCase();
       return status === "pending";
     });
   }, [leadRows]);
+
+  const washroomAgents = useMemo(() => {
+    const ids = new Set();
+
+    todayAttendanceRows.forEach((row) => {
+      if (String(row.Status || "").toLowerCase() === "washroom") {
+        ids.add(String(row.AgentID || "").toUpperCase());
+      }
+    });
+
+    return ids.size;
+  }, [todayAttendanceRows]);
+
+  const meetingAgents = useMemo(() => {
+    const ids = new Set();
+
+    todayAttendanceRows.forEach((row) => {
+      if (String(row.Status || "").toLowerCase() === "meeting") {
+        ids.add(String(row.AgentID || "").toUpperCase());
+      }
+    });
+
+    return ids.size;
+  }, [todayAttendanceRows]);
+
+  const autoLogoutAgents = useMemo(() => {
+    const ids = new Set();
+
+    todayAttendanceRows.forEach((row) => {
+      if (String(row.Status || "").toLowerCase() === "auto logged out") {
+        ids.add(String(row.AgentID || "").toUpperCase());
+      }
+    });
+
+    return ids.size;
+  }, [todayAttendanceRows]);
 
   const recentLeadActivity = useMemo(() => {
     return [...leadRows]
@@ -140,10 +236,17 @@ export default function ManagerDashboardPage() {
 
       <div className="grid gap-5 md:grid-cols-3">
         <StatCard
-          title="Active Agents"
-          value={loading ? "..." : agents.length}
-          subtitle="Registered active agents"
+          title="Active Agents Today"
+          value={loading ? "..." : activeAgentsToday}
+          subtitle="Agents currently working today"
           icon={Users}
+        />
+
+        <StatCard
+          title="Total Leads This Month"
+          value={loading ? "..." : monthlyLeads.length}
+          subtitle="Monthly Google Sheets leads"
+          icon={Activity}
         />
 
         <StatCard
@@ -154,10 +257,24 @@ export default function ManagerDashboardPage() {
         />
 
         <StatCard
-          title="Attendance Records"
-          value={loading ? "..." : attendanceRows.length}
-          subtitle="Rows tracked in Attendance sheet"
-          icon={FileBarChart}
+          title="Agents In Washroom"
+          value={loading ? "..." : washroomAgents}
+          subtitle="Current live status"
+          icon={Bath}
+        />
+
+        <StatCard
+          title="Agents In Meeting"
+          value={loading ? "..." : meetingAgents}
+          subtitle="Current live status"
+          icon={Video}
+        />
+
+        <StatCard
+          title="Auto Logout Agents"
+          value={loading ? "..." : autoLogoutAgents}
+          subtitle="Inactive agents today"
+          icon={LogOut}
         />
       </div>
 
@@ -197,36 +314,22 @@ export default function ManagerDashboardPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td
-                    colSpan="5"
-                    className="px-5 py-8 text-center text-slate-500"
-                  >
+                  <td colSpan="5" className="px-5 py-8 text-center text-slate-500">
                     Loading live lead activity...
                   </td>
                 </tr>
               ) : recentLeadActivity.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan="5"
-                    className="px-5 py-8 text-center text-slate-500"
-                  >
+                  <td colSpan="5" className="px-5 py-8 text-center text-slate-500">
                     No lead submissions found.
                   </td>
                 </tr>
               ) : (
                 recentLeadActivity.map((lead) => (
-                  <tr
-                    key={lead.id}
-                    className="border-t border-white/10 text-slate-300"
-                  >
-                    <td className="px-5 py-4 font-bold text-white">
-                      {lead.agent}
-                    </td>
-
+                  <tr key={lead.id} className="border-t border-white/10 text-slate-300">
+                    <td className="px-5 py-4 font-bold text-white">{lead.agent}</td>
                     <td className="px-5 py-4">{lead.lead}</td>
-
                     <td className="px-5 py-4">{lead.company}</td>
-
                     <td className="px-5 py-4">
                       <span
                         className={`rounded-full border px-3 py-1 text-xs font-bold ${statusBadgeClass(
@@ -236,7 +339,6 @@ export default function ManagerDashboardPage() {
                         {lead.status}
                       </span>
                     </td>
-
                     <td className="px-5 py-4 text-slate-500">{lead.time}</td>
                   </tr>
                 ))

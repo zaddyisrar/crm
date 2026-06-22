@@ -7,6 +7,7 @@ import {
   Users,
   CheckCircle2,
   FileBarChart,
+  BadgeDollarSign,
   LogOut,
 } from "lucide-react";
 
@@ -25,6 +26,11 @@ const links = [
     label: "Approvals",
     href: "/manager/approvals",
     icon: CheckCircle2,
+  },
+  {
+    label: "Commission",
+    href: "/manager/commission",
+    icon: BadgeDollarSign,
   },
   {
     label: "Reports",
@@ -48,12 +54,12 @@ export default function ManagerSidebar() {
   return (
     <aside className="fixed left-0 top-0 z-40 hidden h-screen w-72 border-r border-cyan-300/10 bg-[#03060b]/90 p-5 backdrop-blur-xl lg:block">
       <div className="mb-8 flex justify-center">
-  <img
-    src="/crm-logo.png"
-    alt="CRM"
-    className="h-auto w-[160px]"
-  />
-</div>
+        <img
+          src="/crm-logo.png"
+          alt="CRM"
+          className="h-auto w-[160px]"
+        />
+      </div>
 
       <nav className="mt-6 space-y-2">
         {links.map((item) => {

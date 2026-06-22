@@ -24,6 +24,7 @@ const emptyForm = {
   password: "",
   salary: "",
   workingHours: "8",
+  entryTime: "07:00 PM",
   status: "Active",
 };
 
@@ -143,6 +144,7 @@ export default function ManagerAgentsPage() {
       password: user.Password || "",
       salary: user.Salary || "",
       workingHours: user.WorkingHours || "8",
+      entryTime: user.EntryTime || "07:00 PM",
       status: user.Status || "Active",
     });
     setError("");
@@ -187,6 +189,7 @@ export default function ManagerAgentsPage() {
         password: cleanPassword,
         salary: Number(form.salary || 0),
         workingHours: Number(form.workingHours || 8),
+        entryTime: form.entryTime || "07:00 PM",
         status: form.status || "Active",
       };
 
@@ -220,7 +223,9 @@ export default function ManagerAgentsPage() {
     if (!agentId) return;
 
     const confirmed = window.confirm(
-      `Deactivate ${user.AgentName || agentId}? This will block login but keep old reports safe.`
+      `Deactivate ${
+        user.AgentName || agentId
+      }? This will block login but keep old reports safe.`
     );
 
     if (!confirmed) return;
@@ -264,7 +269,8 @@ export default function ManagerAgentsPage() {
           String(user.AgentID || "").toLowerCase().includes(search) ||
           String(user.AgentName || "").toLowerCase().includes(search) ||
           String(user.Role || "").toLowerCase().includes(search) ||
-          String(user.Status || "").toLowerCase().includes(search)
+          String(user.Status || "").toLowerCase().includes(search) ||
+          String(user.EntryTime || "").toLowerCase().includes(search)
         );
       });
   }, [agents, searchTerm]);
@@ -379,14 +385,14 @@ export default function ManagerAgentsPage() {
             <input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search user, ID, role, status..."
+              placeholder="Search user, ID, role, status, entry time..."
               className="w-full rounded-xl border border-white/10 bg-black/25 py-2.5 pl-9 pr-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/35"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto rounded-[1.5rem] border border-white/10">
-          <table className="w-full min-w-[1250px] text-left text-sm">
+          <table className="w-full min-w-[1350px] text-left text-sm">
             <thead className="bg-white/[0.04] text-xs uppercase tracking-[0.2em] text-cyan-300">
               <tr>
                 <th className="px-5 py-4">Name</th>
@@ -398,6 +404,7 @@ export default function ManagerAgentsPage() {
                 <th className="px-5 py-4">Created</th>
                 <th className="px-5 py-4">Last Login</th>
                 <th className="px-5 py-4">Hours</th>
+                <th className="px-5 py-4">Entry Time</th>
                 <th className="px-5 py-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -406,7 +413,7 @@ export default function ManagerAgentsPage() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan="10"
+                    colSpan="11"
                     className="px-5 py-8 text-center text-slate-500"
                   >
                     Loading users from Agents sheet...
@@ -415,7 +422,7 @@ export default function ManagerAgentsPage() {
               ) : visibleUsers.length === 0 ? (
                 <tr>
                   <td
-                    colSpan="10"
+                    colSpan="11"
                     className="px-5 py-8 text-center text-slate-500"
                   >
                     No users found.
@@ -470,6 +477,10 @@ export default function ManagerAgentsPage() {
 
                       <td className="px-5 py-4 text-slate-400">
                         {user.WorkingHours || "-"}
+                      </td>
+
+                      <td className="px-5 py-4 text-cyan-300">
+                        {user.EntryTime || "07:00 PM"}
                       </td>
 
                       <td className="px-5 py-4">
@@ -598,6 +609,16 @@ export default function ManagerAgentsPage() {
                     }
                     disabled={saving}
                     placeholder="8"
+                    className="inputBox"
+                  />
+                </Field>
+
+                <Field label="Entry Time">
+                  <input
+                    value={form.entryTime}
+                    onChange={(e) => updateForm("entryTime", e.target.value)}
+                    disabled={saving}
+                    placeholder="07:00 PM"
                     className="inputBox"
                   />
                 </Field>
