@@ -9,6 +9,7 @@ import {
   Coffee,
   Bath,
   FileBarChart,
+  Video,
 } from "lucide-react";
 
 import AdminShell from "@/components/admin/AdminShell";
@@ -25,6 +26,12 @@ function getTodayKey() {
   return makeDateKey(new Date());
 }
 
+function getYesterdayKey() {
+  const date = new Date();
+  date.setDate(date.getDate() - 1);
+  return makeDateKey(date);
+}
+
 function getCurrentMonthKey() {
   const date = new Date();
   const year = date.getFullYear();
@@ -34,12 +41,10 @@ function getCurrentMonthKey() {
 
 function normalizeDate(value) {
   if (!value) return "";
-
   const raw = String(value).trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
 
   const date = new Date(value);
-
   if (!Number.isNaN(date.getTime())) {
     return makeDateKey(date);
   }
@@ -49,12 +54,10 @@ function normalizeDate(value) {
 
 function normalizeTime(value) {
   if (!value) return "-";
-
   const raw = String(value).trim();
   if (!raw || raw === "-") return "-";
 
   const date = new Date(value);
-
   if (!Number.isNaN(date.getTime())) {
     return date.toLocaleTimeString([], {
       hour: "2-digit",
@@ -75,7 +78,6 @@ function parseDateTime(dateValue, timeValue) {
   if (!Number.isNaN(parsed.getTime())) return parsed;
 
   const timeDate = new Date(timeRaw);
-
   if (!Number.isNaN(timeDate.getTime())) {
     return new Date(
       Number(dateKey.slice(0, 4)),
@@ -92,24 +94,29 @@ function parseDateTime(dateValue, timeValue) {
 
 function parseStamp(value) {
   if (!value) return null;
-
   const date = new Date(value);
-
   if (!Number.isNaN(date.getTime())) return date;
-
   return null;
 }
 
 function normalizeStatus(value, logoutTime) {
   const logout = normalizeTime(logoutTime);
-
   if (logout && logout !== "-") return "Checked Out";
 
   const status = String(value || "Absent").trim();
-
   if (!status || status === "-") return "Absent";
 
   return status;
+}
+
+function isOpenShift(row) {
+  const status = String(row?.Status || "").toLowerCase();
+  const logout = normalizeTime(row?.LogoutTime);
+
+  if (logout && logout !== "-") return false;
+  if (status === "checked out") return false;
+
+  return true;
 }
 
 function liveScreenMinutes(row) {
@@ -136,13 +143,11 @@ function liveScreenMinutes(row) {
   );
 
   const inactive = Number(row.TotalInactiveMinutes || 0);
-
   return Math.max(0, totalMinutes - inactive);
 }
 
 function minutesToHours(minutes) {
   const total = Number(minutes || 0);
-
   if (total <= 0) return "0h 0m";
 
   const hours = Math.floor(total / 60);
@@ -151,14 +156,16 @@ function minutesToHours(minutes) {
   return `${hours}h ${mins}m`;
 }
 
-function getTodayRecordForAgent(rows, agentId, today) {
+function getCurrentShiftRecordForAgent(rows, agentId, today, yesterday) {
   const cleanAgentId = String(agentId || "").toUpperCase();
 
   const agentRows = rows.filter((row) => {
-    return (
-      String(row.AgentID || "").toUpperCase() === cleanAgentId &&
-      normalizeDate(row.Date) === today
-    );
+    const rowDate = normalizeDate(row.Date);
+    const sameAgent = String(row.AgentID || "").toUpperCase() === cleanAgentId;
+
+    if (!sameAgent) return false;
+
+    return rowDate === today || (rowDate === yesterday && isOpenShift(row));
   });
 
   if (agentRows.length === 0) return null;
@@ -178,7 +185,6 @@ export default function AdminPage() {
   async function loadSheetData(showLoader = false) {
     try {
       if (showLoader) setLoading(true);
-
       setError("");
 
       const [agentsResponse, attendanceResponse, leadsResponse] =
@@ -220,6 +226,7 @@ export default function AdminPage() {
   }, []);
 
   const today = getTodayKey();
+  const yesterday = getYesterdayKey();
   const monthKey = getCurrentMonthKey();
 
   const agentUsers = useMemo(() => {
@@ -231,10 +238,6 @@ export default function AdminPage() {
     });
   }, [agentRows]);
 
-  const todayAttendanceRows = useMemo(() => {
-    return attendanceRows.filter((row) => normalizeDate(row.Date) === today);
-  }, [attendanceRows, today]);
-
   const monthlyLeads = useMemo(() => {
     return leadRows.filter((lead) =>
       normalizeDate(lead.Date).startsWith(monthKey)
@@ -245,25 +248,27 @@ export default function AdminPage() {
     return agentUsers.map((agent) => {
       const agentId = String(agent.AgentID || "").toUpperCase();
 
-      const todayRecord = getTodayRecordForAgent(
+      const shiftRecord = getCurrentShiftRecordForAgent(
         attendanceRows,
         agentId,
-        today
+        today,
+        yesterday
       );
 
-      const loginAt = todayRecord?.LoginTime || "";
-      const logoutAt = todayRecord?.LogoutTime || "";
+      const loginAt = shiftRecord?.LoginTime || "";
+      const logoutAt = shiftRecord?.LogoutTime || "";
 
-      const status = todayRecord
-        ? normalizeStatus(todayRecord?.Status, logoutAt)
+      const status = shiftRecord
+        ? normalizeStatus(shiftRecord?.Status, logoutAt)
         : "Absent";
 
       const activeNow = status === "Active";
       const onBreak = status === "Break";
       const inWashroom = status === "Washroom";
+      const inMeeting = status === "In Meeting";
       const autoLoggedOut = status === "Auto Logged Out";
       const checkedOut = status === "Checked Out";
-      const presentToday = Boolean(todayRecord);
+      const presentToday = Boolean(shiftRecord);
 
       const agentLeadsThisMonth = monthlyLeads.filter(
         (lead) => String(lead.AgentID || "").toUpperCase() === agentId
@@ -271,26 +276,28 @@ export default function AdminPage() {
 
       return {
         ...agent,
-        latestDate: todayRecord?.Date || "",
+        latestDate: shiftRecord?.Date || "",
         loginAt,
         logoutAt,
         status,
         activeNow,
         onBreak,
         inWashroom,
+        inMeeting,
         autoLoggedOut,
         checkedOut,
         presentToday,
-        screenMinutes: liveScreenMinutes(todayRecord),
-        inactiveMinutes: Number(todayRecord?.TotalInactiveMinutes || 0),
+        screenMinutes: liveScreenMinutes(shiftRecord),
+        inactiveMinutes: Number(shiftRecord?.TotalInactiveMinutes || 0),
         leadsThisMonth: agentLeadsThisMonth.length,
       };
     });
-  }, [agentUsers, attendanceRows, monthlyLeads, today, nowTick]);
+  }, [agentUsers, attendanceRows, monthlyLeads, today, yesterday, nowTick]);
 
   const activeAgents = agentsData.filter((x) => x.activeNow).length;
   const breakAgents = agentsData.filter((x) => x.onBreak).length;
   const washroomAgents = agentsData.filter((x) => x.inWashroom).length;
+  const meetingAgents = agentsData.filter((x) => x.inMeeting).length;
   const autoLoggedOutAgents = agentsData.filter((x) => x.autoLoggedOut).length;
   const checkedOutAgents = agentsData.filter((x) => x.checkedOut).length;
   const presentAgents = agentsData.filter((x) => x.presentToday).length;
@@ -319,6 +326,8 @@ export default function AdminPage() {
             ? "Currently on break"
             : agent.status === "Washroom"
             ? "Currently in washroom"
+            : agent.status === "In Meeting"
+            ? "Currently in meeting"
             : agent.status === "Auto Logged Out"
             ? "Auto logged out"
             : agent.status === "Checked Out"
@@ -366,47 +375,31 @@ export default function AdminPage() {
       color: "text-purple-300",
     },
     {
+      title: "In Meeting",
+      value: loading ? "..." : meetingAgents,
+      note: "Latest status",
+      icon: Video,
+      color: "text-blue-300",
+    },
+    {
       title: "Attendance",
       value: loading ? "..." : `${attendanceRate}%`,
-      note: loading ? "Loading..." : `${presentAgents}/${totalAgents} today`,
+      note: loading ? "Loading..." : `${presentAgents}/${totalAgents} shift`,
       icon: Clock3,
       color: "text-cyan-300",
     },
   ];
 
   const summary = [
-    {
-      title: "Screen Time Today",
-      value: loading ? "..." : minutesToHours(totalScreenMinutesToday),
-    },
-    {
-      title: "Inactive Time Today",
-      value: loading ? "..." : minutesToHours(totalInactiveMinutesToday),
-    },
-    {
-      title: "Present Today",
-      value: loading ? "..." : presentAgents,
-    },
-    {
-      title: "Active Agents",
-      value: loading ? "..." : activeAgents,
-    },
-    {
-      title: "On Break",
-      value: loading ? "..." : breakAgents,
-    },
-    {
-      title: "Washroom",
-      value: loading ? "..." : washroomAgents,
-    },
-    {
-      title: "Auto Logged Out",
-      value: loading ? "..." : autoLoggedOutAgents,
-    },
-    {
-      title: "Checked Out",
-      value: loading ? "..." : checkedOutAgents,
-    },
+    { title: "Screen Time Today", value: loading ? "..." : minutesToHours(totalScreenMinutesToday) },
+    { title: "Inactive Time Today", value: loading ? "..." : minutesToHours(totalInactiveMinutesToday) },
+    { title: "Present / Open Shift", value: loading ? "..." : presentAgents },
+    { title: "Active Agents", value: loading ? "..." : activeAgents },
+    { title: "On Break", value: loading ? "..." : breakAgents },
+    { title: "Washroom", value: loading ? "..." : washroomAgents },
+    { title: "In Meeting", value: loading ? "..." : meetingAgents },
+    { title: "Auto Logged Out", value: loading ? "..." : autoLoggedOutAgents },
+    { title: "Checked Out", value: loading ? "..." : checkedOutAgents },
   ];
 
   return (
@@ -427,12 +420,12 @@ export default function AdminPage() {
         </h1>
 
         <p className="mt-1 text-xs text-slate-500">
-          Showing today&apos;s live attendance, screen time, inactive time, and
-          monthly leads.
+          Showing live shift attendance. Night-shift agents remain visible after
+          midnight until checkout.
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         {stats.map((card) => {
           const Icon = card.icon;
 
@@ -473,7 +466,7 @@ export default function AdminPage() {
               </div>
             ) : liveOperations.length === 0 ? (
               <div className="rounded-xl border border-white/5 bg-black/20 px-4 py-7 text-center text-sm text-slate-500">
-                No agent activity found today.
+                No active shift activity found.
               </div>
             ) : (
               liveOperations.map((x, index) => (
@@ -484,7 +477,7 @@ export default function AdminPage() {
                   <div>
                     <p className="font-semibold text-white">{x.agent}</p>
                     <p className="mt-1 text-xs text-slate-500">
-                      {x.action} {x.date ? `· ${x.date}` : ""}
+                      {x.action} {x.date ? `· Shift date ${x.date}` : ""}
                     </p>
                     <p className="mt-1 text-[11px] text-slate-600">
                       Screen {x.screen} · Inactive {x.inactive}
@@ -501,7 +494,7 @@ export default function AdminPage() {
         <div className="rounded-[1.4rem] border border-cyan-300/10 bg-white/[0.03] p-4">
           <div className="mb-4 flex items-center gap-3">
             <TrendingUp className="text-cyan-300" size={17} />
-            <h2 className="text-base font-bold text-white">Today Summary</h2>
+            <h2 className="text-base font-bold text-white">Shift Summary</h2>
           </div>
 
           <div className="space-y-2.5">
@@ -526,6 +519,7 @@ function StatusPill({ status }) {
     Active: "border-emerald-300/20 bg-emerald-300/10 text-emerald-300",
     Break: "border-yellow-300/20 bg-yellow-300/10 text-yellow-300",
     Washroom: "border-purple-300/20 bg-purple-300/10 text-purple-300",
+    "In Meeting": "border-blue-300/20 bg-blue-300/10 text-blue-300",
     "Auto Logged Out": "border-red-300/20 bg-red-300/10 text-red-300",
     "Checked Out": "border-orange-300/20 bg-orange-300/10 text-orange-300",
     Absent: "border-red-300/20 bg-red-300/10 text-red-300",

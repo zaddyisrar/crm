@@ -22,6 +22,18 @@ function getTodayKey() {
   return `${year}-${month}-${day}`;
 }
 
+function getYesterdayKey() {
+  const date = new Date();
+
+  date.setDate(date.getDate() - 1);
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 function normalizeDate(value) {
   if (!value) return "";
 
@@ -145,11 +157,23 @@ export default function ManagerDashboardPage() {
   }, []);
 
   const todayKey = getTodayKey();
+  const yesterdayKey = getYesterdayKey();
   const monthKey = todayKey.slice(0, 7);
 
   const todayAttendanceRows = useMemo(() => {
-    return attendanceRows.filter((row) => normalizeDate(row.Date) === todayKey);
-  }, [attendanceRows, todayKey]);
+    return attendanceRows.filter((row) => {
+      const rowDate = normalizeDate(row.Date);
+      const status = String(row.Status || "").toLowerCase();
+      const logoutTime = normalizeTime(row.LogoutTime);
+
+      const isOpenShift = logoutTime === "-" && status !== "checked out";
+
+      return (
+        rowDate === todayKey ||
+        (rowDate === yesterdayKey && isOpenShift)
+      );
+    });
+  }, [attendanceRows, todayKey, yesterdayKey]);
 
   const activeAgentsToday = useMemo(() => {
     const activeIds = new Set();
@@ -214,6 +238,7 @@ export default function ManagerDashboardPage() {
           loginAt: normalizeTime(row.LoginTime),
           logoutAt,
           updatedAt: normalizeTime(row.UpdatedAt),
+          shiftDate: normalizeDate(row.Date),
         };
       })
       .reverse();
@@ -263,7 +288,7 @@ export default function ManagerDashboardPage() {
         <StatCard
           title="Auto Logout Agents"
           value={loading ? "..." : autoLogoutAgents}
-          subtitle="Inactive agents today"
+          subtitle="Inactive agents in open shift"
           icon={LogOut}
         />
       </div>
@@ -276,11 +301,11 @@ export default function ManagerDashboardPage() {
             </p>
 
             <h2 className="mt-2 text-2xl font-black text-white">
-              Today Floor Status
+              Current Shift Floor Status
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Live attendance status from Google Sheets Attendance tab.
+              Night-shift agents remain visible after midnight until checkout.
             </p>
           </div>
 
@@ -290,7 +315,7 @@ export default function ManagerDashboardPage() {
         </div>
 
         <div className="overflow-hidden overflow-x-auto rounded-2xl border border-white/10">
-          <table className="w-full min-w-[900px] text-left text-sm">
+          <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="bg-white/[0.04] text-xs uppercase tracking-[0.22em] text-cyan-300">
               <tr>
                 <th className="px-5 py-4">Agent</th>
@@ -298,6 +323,7 @@ export default function ManagerDashboardPage() {
                 <th className="px-5 py-4">Status</th>
                 <th className="px-5 py-4">Login At</th>
                 <th className="px-5 py-4">Logout At</th>
+                <th className="px-5 py-4">Shift Date</th>
                 <th className="px-5 py-4">Updated</th>
               </tr>
             </thead>
@@ -306,7 +332,7 @@ export default function ManagerDashboardPage() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan="6"
+                    colSpan="7"
                     className="px-5 py-8 text-center text-slate-500"
                   >
                     Loading live agent activity...
@@ -315,10 +341,10 @@ export default function ManagerDashboardPage() {
               ) : liveAgentActivity.length === 0 ? (
                 <tr>
                   <td
-                    colSpan="6"
+                    colSpan="7"
                     className="px-5 py-8 text-center text-slate-500"
                   >
-                    No attendance activity found for today.
+                    No open shift activity found.
                   </td>
                 </tr>
               ) : (
@@ -348,6 +374,10 @@ export default function ManagerDashboardPage() {
                     <td className="px-5 py-4">{agent.loginAt}</td>
 
                     <td className="px-5 py-4">{agent.logoutAt}</td>
+
+                    <td className="px-5 py-4 text-blue-300">
+                      {agent.shiftDate || "-"}
+                    </td>
 
                     <td className="px-5 py-4 text-slate-500">
                       {agent.updatedAt}
