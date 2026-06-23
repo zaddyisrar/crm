@@ -11,6 +11,8 @@ import {
   ChevronRight,
   CalendarDays,
   RefreshCcw,
+  CalendarPlus,
+  Trash2,
 } from "lucide-react";
 
 import AdminShell from "@/components/admin/AdminShell";
@@ -21,7 +23,6 @@ function getTodayKey() {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-
   return `${year}-${month}-${day}`;
 }
 
@@ -47,12 +48,9 @@ function moveDate(dateKey, days) {
 
 function normalizeDate(value) {
   if (!value) return "";
-
   const raw = String(value).trim();
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    return raw;
-  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
 
   const date = new Date(value);
 
@@ -60,7 +58,6 @@ function normalizeDate(value) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
-
     return `${year}-${month}-${day}`;
   }
 
@@ -69,7 +66,6 @@ function normalizeDate(value) {
 
 function normalizeTime(value) {
   if (!value) return "-";
-
   const raw = String(value).trim();
 
   if (!raw || raw === "-") return "-";
@@ -90,7 +86,6 @@ function normalizeStatus(value, logoutTime) {
   if (logoutTime && logoutTime !== "-") return "Checked Out";
 
   const status = String(value || "Active").trim();
-
   if (!status || status === "-") return "Active";
 
   return status;
@@ -100,26 +95,35 @@ export default function AttendancePage() {
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [agentRows, setAgentRows] = useState([]);
   const [attendanceRows, setAttendanceRows] = useState([]);
+  const [holidayRows, setHolidayRows] = useState([]);
+
+  const [holidayTitle, setHolidayTitle] = useState("");
   const [loading, setLoading] = useState(true);
+  const [holidaySaving, setHolidaySaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   async function loadAttendance(showLoader = false) {
     try {
       if (showLoader) setLoading(true);
+      setError("");
 
-      const attendanceResponse = await sheetsPost({
-        action: "getAttendance",
-      });
+      const [attendanceResponse, agentsResponse, holidaysResponse] =
+        await Promise.all([
+          sheetsPost({ action: "getAttendance" }),
+          sheetsPost({ action: "getAgents" }),
+          sheetsPost({ action: "getHolidays" }),
+        ]);
 
-      const agentsResponse = await sheetsPost({
-        action: "getAgents",
-      });
-
-      setAttendanceRows(attendanceResponse.data || []);
-      setAgentRows(agentsResponse.data || []);
+      setAttendanceRows(attendanceResponse?.data || []);
+      setAgentRows(agentsResponse?.data || []);
+      setHolidayRows(holidaysResponse?.data || []);
     } catch (error) {
       console.error("Attendance sheet read failed:", error);
+      setError(error?.message || "Failed to load attendance data");
       setAttendanceRows([]);
       setAgentRows([]);
+      setHolidayRows([]);
     } finally {
       if (showLoader) setLoading(false);
     }
@@ -134,6 +138,13 @@ export default function AttendancePage() {
 
     return () => clearInterval(interval);
   }, []);
+
+  const selectedHoliday = useMemo(() => {
+    return (
+      holidayRows.find((holiday) => normalizeDate(holiday.Date) === selectedDate) ||
+      null
+    );
+  }, [holidayRows, selectedDate]);
 
   const records = useMemo(() => {
     const selectedRows = attendanceRows.filter(
@@ -168,6 +179,70 @@ export default function AttendancePage() {
     .filter((item) => item.status !== "Absent")
     .slice(0, 8);
 
+  async function handleAddHoliday(e) {
+    e.preventDefault();
+
+    try {
+      setHolidaySaving(true);
+      setError("");
+      setSuccess("");
+
+      const title = holidayTitle.trim() || "Company Holiday";
+
+      const response = await sheetsPost({
+        action: "addHoliday",
+        date: selectedDate,
+        title,
+        type: "Holiday",
+        addedBy: "Admin",
+      });
+
+      if (response?.success === false) {
+        throw new Error(response.message || "Failed to add holiday");
+      }
+
+      setHolidayTitle("");
+      setSuccess("Holiday added successfully.");
+      await loadAttendance(false);
+    } catch (error) {
+      console.error("Holiday add failed:", error);
+      setError(error?.message || "Failed to add holiday");
+    } finally {
+      setHolidaySaving(false);
+    }
+  }
+
+  async function handleDeleteHoliday() {
+    const confirmed = window.confirm(
+      `Remove holiday from ${formatDateLabel(selectedDate)}?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setHolidaySaving(true);
+      setError("");
+      setSuccess("");
+
+      const response = await sheetsPost({
+        action: "deleteHoliday",
+        date: selectedDate,
+      });
+
+      if (response?.success === false) {
+        throw new Error(response.message || "Failed to delete holiday");
+      }
+
+      setSuccess("Holiday removed successfully.");
+      await loadAttendance(false);
+    } catch (error) {
+      console.error("Holiday delete failed:", error);
+      setError(error?.message || "Failed to delete holiday");
+    } finally {
+      setHolidaySaving(false);
+    }
+  }
+
   return (
     <AdminShell>
       <div className="mb-5 rounded-[1.6rem] border border-cyan-300/10 bg-white/[0.03] px-8 py-6">
@@ -180,8 +255,7 @@ export default function AttendancePage() {
             <h1 className="text-4xl font-black text-white">Attendance</h1>
 
             <p className="mt-2 text-xs text-slate-500">
-              Historical selected-date view. Live current status is shown on the
-              Admin Dashboard.
+              Historical selected-date view. Holidays added here are excluded from payroll.
             </p>
           </div>
 
@@ -226,41 +300,83 @@ export default function AttendancePage() {
         </div>
       </div>
 
+      {(error || success) && (
+        <div
+          className={`mb-5 rounded-2xl border px-4 py-3 text-sm ${
+            error
+              ? "border-red-400/20 bg-red-400/10 text-red-300"
+              : "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
+          }`}
+        >
+          {error || success}
+        </div>
+      )}
+
+      <div className="mb-5 rounded-[1.6rem] border border-cyan-300/10 bg-white/[0.03] p-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-cyan-300">
+              Holiday Control
+            </p>
+
+            <h2 className="mt-2 text-xl font-black text-white">
+              {selectedHoliday
+                ? selectedHoliday.Title || "Holiday"
+                : "Mark Selected Date As Holiday"}
+            </h2>
+
+            <p className="mt-1 text-xs text-slate-500">
+              Selected date: {formatDateLabel(selectedDate)}
+            </p>
+
+            {selectedHoliday && (
+              <div className="mt-3 inline-flex rounded-xl border border-yellow-300/20 bg-yellow-300/10 px-3 py-1.5 text-xs font-bold text-yellow-300">
+                Holiday · {selectedHoliday.Type || "Holiday"} · Added by{" "}
+                {selectedHoliday.AddedBy || "Admin"}
+              </div>
+            )}
+          </div>
+
+          {selectedHoliday ? (
+            <button
+              onClick={handleDeleteHoliday}
+              disabled={holidaySaving}
+              className="flex items-center justify-center gap-2 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-2.5 text-sm font-bold text-red-300 transition hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Trash2 size={16} />
+              {holidaySaving ? "Removing..." : "Remove Holiday"}
+            </button>
+          ) : (
+            <form
+              onSubmit={handleAddHoliday}
+              className="grid w-full gap-3 md:grid-cols-[1fr_auto] xl:w-[520px]"
+            >
+              <input
+                value={holidayTitle}
+                onChange={(e) => setHolidayTitle(e.target.value)}
+                placeholder="Holiday title e.g. Eid Holiday"
+                className="w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/35"
+              />
+
+              <button
+                type="submit"
+                disabled={holidaySaving}
+                className="flex items-center justify-center gap-2 rounded-xl border border-yellow-300/20 bg-yellow-300/10 px-4 py-2.5 text-sm font-bold text-yellow-300 transition hover:bg-yellow-300/15 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <CalendarPlus size={16} />
+                {holidaySaving ? "Adding..." : "Mark Holiday"}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <Stat
-          title="Present"
-          value={loading ? "..." : present}
-          icon={UserCheck}
-          tone="emerald"
-        />
-
-        <Stat
-          title="Active Now"
-          value={loading ? "..." : active}
-          icon={Clock3}
-          tone="cyan"
-        />
-
-        <Stat
-          title="On Break"
-          value={loading ? "..." : onBreak}
-          icon={Coffee}
-          tone="yellow"
-        />
-
-        <Stat
-          title="Washroom"
-          value={loading ? "..." : washroom}
-          icon={Bath}
-          tone="purple"
-        />
-
-        <Stat
-          title="Checked Out"
-          value={loading ? "..." : checkedOut}
-          icon={LogOut}
-          tone="orange"
-        />
+        <Stat title="Present" value={loading ? "..." : present} icon={UserCheck} tone="emerald" />
+        <Stat title="Active Now" value={loading ? "..." : active} icon={Clock3} tone="cyan" />
+        <Stat title="On Break" value={loading ? "..." : onBreak} icon={Coffee} tone="yellow" />
+        <Stat title="Washroom" value={loading ? "..." : washroom} icon={Bath} tone="purple" />
+        <Stat title="Checked Out" value={loading ? "..." : checkedOut} icon={LogOut} tone="orange" />
       </div>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.5fr_0.8fr]">
@@ -287,42 +403,27 @@ export default function AttendancePage() {
               <tbody className="divide-y divide-white/10">
                 {loading ? (
                   <tr>
-                    <td
-                      colSpan="6"
-                      className="px-5 py-8 text-center text-slate-500"
-                    >
+                    <td colSpan="6" className="px-5 py-8 text-center text-slate-500">
                       Loading attendance records...
                     </td>
                   </tr>
                 ) : records.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan="6"
-                      className="px-5 py-8 text-center text-slate-500"
-                    >
+                    <td colSpan="6" className="px-5 py-8 text-center text-slate-500">
                       No records found for selected date.
                     </td>
                   </tr>
                 ) : (
                   records.map((agent) => (
                     <tr key={agent.rowKey} className="text-slate-300">
-                      <td className="px-5 py-4 font-bold text-white">
-                        {agent.name}
-                      </td>
-
+                      <td className="px-5 py-4 font-bold text-white">{agent.name}</td>
                       <td className="px-5 py-4 text-cyan-300">{agent.id}</td>
-
                       <td className="px-5 py-4">{agent.loginAt}</td>
-
                       <td className="px-5 py-4">{agent.logoutAt}</td>
-
                       <td className="px-5 py-4">
                         <StatusPill status={agent.status} />
                       </td>
-
-                      <td className="px-5 py-4 text-slate-500">
-                        {agent.updatedAt}
-                      </td>
+                      <td className="px-5 py-4 text-slate-500">{agent.updatedAt}</td>
                     </tr>
                   ))
                 )}
@@ -353,10 +454,7 @@ export default function AttendancePage() {
               </div>
             ) : (
               recentRecords.map((item) => (
-                <div
-                  key={item.rowKey}
-                  className="rounded-2xl border border-white/10 bg-black/20 p-4"
-                >
+                <div key={item.rowKey} className="rounded-2xl border border-white/10 bg-black/20 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="font-bold text-white">{item.name}</p>
@@ -368,18 +466,15 @@ export default function AttendancePage() {
 
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-400">
                     <p>
-                      Login At:{" "}
-                      <span className="text-cyan-300">{item.loginAt}</span>
+                      Login At: <span className="text-cyan-300">{item.loginAt}</span>
                     </p>
 
                     <p>
-                      Logout At:{" "}
-                      <span className="text-cyan-300">{item.logoutAt}</span>
+                      Logout At: <span className="text-cyan-300">{item.logoutAt}</span>
                     </p>
 
                     <p className="col-span-2">
-                      Updated:{" "}
-                      <span className="text-cyan-300">{item.updatedAt}</span>
+                      Updated: <span className="text-cyan-300">{item.updatedAt}</span>
                     </p>
                   </div>
                 </div>
@@ -419,6 +514,7 @@ function StatusPill({ status }) {
     Break: "border-yellow-300/20 bg-yellow-300/10 text-yellow-300",
     Washroom: "border-purple-300/20 bg-purple-300/10 text-purple-300",
     "Checked Out": "border-orange-300/20 bg-orange-300/10 text-orange-300",
+    "Auto Logged Out": "border-red-300/20 bg-red-300/10 text-red-300",
     Absent: "border-red-300/20 bg-red-300/10 text-red-300",
   };
 

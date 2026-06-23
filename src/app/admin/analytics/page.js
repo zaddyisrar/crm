@@ -7,8 +7,8 @@ import {
   CalendarDays,
   BadgeDollarSign,
   UserCheck,
-  UserX,
   RefreshCcw,
+  TrendingDown,
 } from "lucide-react";
 
 import AdminShell from "@/components/admin/AdminShell";
@@ -16,71 +16,101 @@ import { sheetsPost } from "@/lib/sheetsApi";
 
 function getCurrentMonthKey() {
   const today = new Date();
-
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(
-    2,
-    "0"
-  )}`;
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function getWorkingDaysInMonth(year, month) {
-  let total = 0;
-
-  for (
-    let day = new Date(year, month, 1);
-    day.getMonth() === month;
-    day.setDate(day.getDate() + 1)
-  ) {
-    const weekDay = day.getDay();
-
-    if (weekDay !== 0 && weekDay !== 6) {
-      total++;
-    }
-  }
-
-  return total;
+function makeDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function normalizeDate(value) {
   if (!value) return "";
-
   const raw = String(value).trim();
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    return raw;
-  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
 
   const date = new Date(value);
+  if (!Number.isNaN(date.getTime())) return makeDateKey(date);
 
+  return raw;
+}
+
+function normalizeTime(value) {
+  if (!value) return "-";
+  const raw = String(value).trim();
+
+  if (!raw || raw === "-") return "-";
+
+  const date = new Date(value);
   if (!Number.isNaN(date.getTime())) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-
-    return `${year}-${month}-${day}`;
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
 
   return raw;
 }
 
-function getMonthFromDate(value) {
-  const date = normalizeDate(value);
+function parseTimeToMinutes(value) {
+  const raw = normalizeTime(value);
+  if (!raw || raw === "-") return null;
 
-  if (!date || date.length < 7) return "";
+  const match = raw.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return null;
 
-  return date.slice(0, 7);
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const ampm = match[3].toUpperCase();
+
+  if (ampm === "PM" && hour !== 12) hour += 12;
+  if (ampm === "AM" && hour === 12) hour = 0;
+
+  return hour * 60 + minute;
+}
+
+function classifyAttendance(loginTime, entryTime = "07:00 PM") {
+  const loginMinutes = parseTimeToMinutes(loginTime);
+  const entryMinutes = parseTimeToMinutes(entryTime);
+
+  if (loginMinutes === null || entryMinutes === null) return "onTime";
+
+  if (loginMinutes > entryMinutes + 60) return "halfDay";
+  if (loginMinutes > entryMinutes + 10) return "late";
+
+  return "onTime";
+}
+
+function isWeekend(dateKey) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  const day = date.getDay();
+  return day === 0 || day === 6;
+}
+
+function getWorkingDaysInMonth(monthKey, holidays = []) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const lastDay = new Date(year, month, 0).getDate();
+  const holidaySet = new Set(holidays.map((holiday) => normalizeDate(holiday.Date)));
+
+  const days = [];
+
+  for (let day = 1; day <= lastDay; day++) {
+    const dateKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
+    if (isWeekend(dateKey)) continue;
+    if (holidaySet.has(dateKey)) continue;
+
+    days.push(dateKey);
+  }
+
+  return days;
 }
 
 function formatPKR(value) {
-  const safeValue = Number(value || 0);
-
-  return `${Math.round(safeValue).toLocaleString()} PKR`;
-}
-
-function getNumber(value, fallback = 0) {
-  const parsed = Number(value);
-
-  return Number.isFinite(parsed) ? parsed : fallback;
+  return `${Math.round(Number(value || 0)).toLocaleString()} PKR`;
 }
 
 export default function AnalyticsPage() {
@@ -89,7 +119,8 @@ export default function AnalyticsPage() {
 
   const [agentRows, setAgentRows] = useState([]);
   const [attendanceRows, setAttendanceRows] = useState([]);
-  const [leadRows, setLeadRows] = useState([]);
+  const [commissionRows, setCommissionRows] = useState([]);
+  const [holidayRows, setHolidayRows] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -97,24 +128,27 @@ export default function AnalyticsPage() {
   async function loadAnalytics(showLoader = false) {
     try {
       if (showLoader) setLoading(true);
-
       setError("");
 
-      const agentsResponse = await sheetsPost({ action: "getAgents" });
-      const attendanceResponse = await sheetsPost({
-        action: "getAttendance",
-      });
-      const leadsResponse = await sheetsPost({ action: "getLeads" });
+      const [agentsResponse, attendanceResponse, commissionsResponse, holidaysResponse] =
+        await Promise.all([
+          sheetsPost({ action: "getAgents" }),
+          sheetsPost({ action: "getAttendance" }),
+          sheetsPost({ action: "getCommissions" }),
+          sheetsPost({ action: "getHolidays" }),
+        ]);
 
-      setAgentRows(agentsResponse.data || []);
-      setAttendanceRows(attendanceResponse.data || []);
-      setLeadRows(leadsResponse.data || []);
+      setAgentRows(agentsResponse?.data || []);
+      setAttendanceRows(attendanceResponse?.data || []);
+      setCommissionRows(commissionsResponse?.data || []);
+      setHolidayRows(holidaysResponse?.data || []);
     } catch (err) {
       console.error("Admin analytics sheet read failed:", err);
-      setError(err.message || "Failed to load analytics from Google Sheets");
+      setError(err?.message || "Failed to load analytics from Google Sheets");
       setAgentRows([]);
       setAttendanceRows([]);
-      setLeadRows([]);
+      setCommissionRows([]);
+      setHolidayRows([]);
     } finally {
       if (showLoader) setLoading(false);
     }
@@ -130,139 +164,160 @@ export default function AnalyticsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const salaryRows = useMemo(() => {
-    const [yearValue, monthValue] = selectedMonth.split("-").map(Number);
-    const workingDays = getWorkingDaysInMonth(yearValue, monthValue - 1);
+  const workingDays = useMemo(() => {
+    return getWorkingDaysInMonth(selectedMonth, holidayRows);
+  }, [selectedMonth, holidayRows]);
 
-    const agents = agentRows.filter(
-      (user) => String(user.Role || "").toLowerCase() === "agent"
-    );
+  const payrollRows = useMemo(() => {
+    const search = searchAgent.toLowerCase().trim();
 
-    return agents
+    const agents = agentRows
+      .filter((user) => {
+        const role = String(user.Role || "").toLowerCase();
+        const status = String(user.Status || "Active").toLowerCase();
+        return role === "agent" && status !== "inactive";
+      })
       .filter((agent) => {
-        const search = searchAgent.toLowerCase();
+        if (!search) return true;
 
         return (
           String(agent.AgentName || "").toLowerCase().includes(search) ||
           String(agent.AgentID || "").toLowerCase().includes(search)
         );
-      })
-      .map((agent) => {
-        const agentId = String(agent.AgentID || "").toUpperCase();
-        const monthlySalary = getNumber(agent.Salary, 0);
-        const requiredWorkingHours = getNumber(agent.WorkingHours, 8);
-
-        const agentAttendanceForMonth = attendanceRows.filter((row) => {
-          const sameAgent =
-            String(row.AgentID || "").toUpperCase() === agentId;
-
-          const sameMonth = getMonthFromDate(row.Date) === selectedMonth;
-
-          return sameAgent && sameMonth;
-        });
-
-        const uniquePresentDays = new Set(
-          agentAttendanceForMonth.map((row) => normalizeDate(row.Date))
-        );
-
-        const presentDays = uniquePresentDays.size;
-        const absentDays = Math.max(workingDays - presentDays, 0);
-
-        const dailySalary =
-          workingDays > 0 ? monthlySalary / workingDays : 0;
-
-        const earnedSalary = dailySalary * presentDays;
-
-        const leadsThisMonth = leadRows.filter((lead) => {
-          const sameAgent =
-            String(lead.AgentID || "").toUpperCase() === agentId;
-
-          const sameMonth = getMonthFromDate(lead.Date) === selectedMonth;
-
-          return sameAgent && sameMonth;
-        });
-
-        const approvedLeads = leadsThisMonth.filter(
-          (lead) =>
-            String(lead.ApprovalStatus || "").toLowerCase() === "approved"
-        ).length;
-
-        const pendingLeads = leadsThisMonth.filter(
-          (lead) =>
-            String(lead.ApprovalStatus || "").toLowerCase() === "pending"
-        ).length;
-
-        const rejectedLeads = leadsThisMonth.filter(
-          (lead) =>
-            String(lead.ApprovalStatus || "").toLowerCase() === "rejected"
-        ).length;
-
-        return {
-          agentId: agent.AgentID || "-",
-          agentName: agent.AgentName || "Agent",
-          monthlySalary,
-          requiredWorkingHours,
-          workingDays,
-          presentDays,
-          absentDays,
-          dailySalary,
-          earnedSalary,
-          totalLeads: leadsThisMonth.length,
-          approvedLeads,
-          pendingLeads,
-          rejectedLeads,
-        };
       });
-  }, [agentRows, attendanceRows, leadRows, searchAgent, selectedMonth]);
+
+    const monthAttendance = attendanceRows.filter((row) =>
+      normalizeDate(row.Date).startsWith(selectedMonth)
+    );
+
+    const monthCommissions = commissionRows.filter((row) =>
+      normalizeDate(row.Date).startsWith(selectedMonth)
+    );
+
+    return agents.map((agent) => {
+      const agentId = String(agent.AgentID || "").toUpperCase();
+      const salary = Number(agent.Salary || 0);
+      const entryTime = agent.EntryTime || "07:00 PM";
+      const totalDays = workingDays.length;
+      const dailySalary = totalDays > 0 ? salary / totalDays : 0;
+
+      const agentAttendance = monthAttendance.filter(
+        (row) => String(row.AgentID || "").toUpperCase() === agentId
+      );
+
+      const attendanceByDate = {};
+
+      agentAttendance.forEach((row) => {
+        const date = normalizeDate(row.Date);
+        if (!date) return;
+        if (!workingDays.includes(date)) return;
+        if (!attendanceByDate[date]) attendanceByDate[date] = row;
+      });
+
+      let activeDays = 0;
+      let late = 0;
+      let onTime = 0;
+      let halfDays = 0;
+      let absent = 0;
+
+      workingDays.forEach((date) => {
+        const row = attendanceByDate[date];
+
+        if (!row) {
+          absent++;
+          return;
+        }
+
+        activeDays++;
+
+        const status = classifyAttendance(row.LoginTime, entryTime);
+
+        if (status === "halfDay") halfDays++;
+        else if (status === "late") late++;
+        else onTime++;
+      });
+
+      const commission = monthCommissions
+        .filter((row) => String(row.AgentID || "").toUpperCase() === agentId)
+        .reduce((sum, row) => sum + Number(row.Commission || 0), 0);
+
+      const lateDeduction = late * (dailySalary / 3);
+      const halfDayDeduction = halfDays * (dailySalary / 2);
+      const absentDeduction = absent * dailySalary;
+      const deduction = lateDeduction + halfDayDeduction + absentDeduction;
+      const finalSalary = salary - deduction + commission;
+
+      return {
+        agentId: agent.AgentID || "-",
+        agentName: agent.AgentName || "Agent",
+        baseSalary: salary,
+        entryTime,
+        totalDays,
+        activeDays,
+        late,
+        onTime,
+        halfDays,
+        absent,
+        commission,
+        deduction,
+        finalSalary,
+        dailySalary,
+      };
+    });
+  }, [
+    agentRows,
+    attendanceRows,
+    commissionRows,
+    searchAgent,
+    selectedMonth,
+    workingDays,
+  ]);
 
   const summary = useMemo(() => {
-    const totalMonthlySalary = salaryRows.reduce(
-      (sum, agent) => sum + agent.monthlySalary,
-      0
+    return payrollRows.reduce(
+      (acc, row) => {
+        acc.totalBase += Number(row.baseSalary || 0);
+        acc.totalCommission += Number(row.commission || 0);
+        acc.totalDeductions += Number(row.deduction || 0);
+        acc.netPayroll += Number(row.finalSalary || 0);
+        acc.totalActiveDays += Number(row.activeDays || 0);
+        acc.totalDays += Number(row.totalDays || 0);
+        return acc;
+      },
+      {
+        totalBase: 0,
+        totalCommission: 0,
+        totalDeductions: 0,
+        netPayroll: 0,
+        totalActiveDays: 0,
+        totalDays: 0,
+      }
     );
+  }, [payrollRows]);
 
-    const totalEstimatedSalary = salaryRows.reduce(
-      (sum, agent) => sum + agent.earnedSalary,
-      0
-    );
-
-    const totalPresentDays = salaryRows.reduce(
-      (sum, agent) => sum + agent.presentDays,
-      0
-    );
-
-    const totalAbsentDays = salaryRows.reduce(
-      (sum, agent) => sum + agent.absentDays,
-      0
-    );
-
-    return {
-      totalMonthlySalary,
-      totalEstimatedSalary,
-      totalPresentDays,
-      totalAbsentDays,
-    };
-  }, [salaryRows]);
+  const attendanceRate =
+    summary.totalDays > 0
+      ? Math.round((summary.totalActiveDays / summary.totalDays) * 100)
+      : 0;
 
   return (
     <AdminShell
-      title="Analytics"
-      subtitle="Salary analytics and monthly attendance-based calculations."
+      title="Payroll Center"
+      subtitle="Final salary engine with attendance, late, half day, holidays, and commission."
     >
       <section className="rounded-2xl border border-cyan-300/15 bg-[#071018]/80 p-5 backdrop-blur-xl">
         <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.25em] text-cyan-300/70">
-              Salary Analytics
+              Admin Payroll
             </p>
 
             <h3 className="mt-1 text-lg font-semibold text-white">
-              Agent Monthly Salary Calculation
+              Monthly Salary Calculation
             </h3>
 
             <p className="mt-1 text-sm text-slate-500">
-              Data is calculated from Agents, Attendance, and Leads sheets.
-              Saturday and Sunday are counted as off days.
+              Weekends and admin holidays are excluded. EntryTime controls late and half day.
             </p>
           </div>
 
@@ -293,10 +348,7 @@ export default function AnalyticsPage() {
               disabled={loading}
               className="flex items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-2.5 text-sm font-bold text-cyan-200 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <RefreshCcw
-                size={15}
-                className={loading ? "animate-spin" : ""}
-              />
+              <RefreshCcw size={15} className={loading ? "animate-spin" : ""} />
               Refresh
             </button>
           </div>
@@ -310,119 +362,109 @@ export default function AnalyticsPage() {
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <SalaryMiniCard
-            label="Total Monthly Payroll"
-            value={loading ? "..." : formatPKR(summary.totalMonthlySalary)}
+            label="Total Payroll"
+            value={loading ? "..." : formatPKR(summary.totalBase)}
             icon={Wallet}
             tone="text-cyan-300"
           />
 
           <SalaryMiniCard
-            label="Estimated Payable"
-            value={loading ? "..." : formatPKR(summary.totalEstimatedSalary)}
+            label="Total Commission"
+            value={loading ? "..." : formatPKR(summary.totalCommission)}
+            icon={BadgeDollarSign}
+            tone="text-emerald-300"
+          />
+
+          <SalaryMiniCard
+            label="Total Deductions"
+            value={loading ? "..." : formatPKR(summary.totalDeductions)}
+            icon={TrendingDown}
+            tone="text-red-300"
+          />
+
+          <SalaryMiniCard
+            label="Net Payroll"
+            value={loading ? "..." : formatPKR(summary.netPayroll)}
             icon={BadgeDollarSign}
             tone="text-yellow-300"
           />
 
           <SalaryMiniCard
-            label="Present Days"
-            value={loading ? "..." : summary.totalPresentDays}
+            label="Attendance Rate"
+            value={loading ? "..." : `${attendanceRate}%`}
             icon={UserCheck}
-            tone="text-green-300"
-          />
-
-          <SalaryMiniCard
-            label="Absent Days"
-            value={loading ? "..." : summary.totalAbsentDays}
-            icon={UserX}
-            tone="text-red-300"
-          />
-
-          <SalaryMiniCard
-            label="Agents"
-            value={loading ? "..." : salaryRows.length}
-            icon={CalendarDays}
             tone="text-purple-300"
           />
         </div>
 
         <div className="mt-5 overflow-x-auto rounded-2xl border border-white/10">
-          <table className="w-full min-w-[1250px] text-left text-sm">
+          <table className="w-full min-w-[1350px] text-left text-sm">
             <thead className="bg-white/[0.03] text-slate-400">
               <tr>
                 <th className="px-4 py-4 font-medium">Agent</th>
-                <th className="px-4 py-4 font-medium">Login ID</th>
-                <th className="px-4 py-4 font-medium">Monthly Salary</th>
-                <th className="px-4 py-4 font-medium">Working Days</th>
-                <th className="px-4 py-4 font-medium">Present</th>
+                <th className="px-4 py-4 font-medium">Total Days</th>
+                <th className="px-4 py-4 font-medium">Active Days</th>
+                <th className="px-4 py-4 font-medium">Late</th>
+                <th className="px-4 py-4 font-medium">On Time</th>
+                <th className="px-4 py-4 font-medium">Half Days</th>
                 <th className="px-4 py-4 font-medium">Absent</th>
-                <th className="px-4 py-4 font-medium">Daily Salary</th>
-                <th className="px-4 py-4 font-medium">Estimated Salary</th>
-                <th className="px-4 py-4 font-medium">Leads</th>
-                <th className="px-4 py-4 font-medium">Approved</th>
-                <th className="px-4 py-4 font-medium">Pending</th>
-                <th className="px-4 py-4 font-medium">Rejected</th>
+                <th className="px-4 py-4 font-medium">Commission</th>
+                <th className="px-4 py-4 font-medium">Deduction</th>
+                <th className="px-4 py-4 font-medium">Final Salary</th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-white/10">
               {loading ? (
                 <tr>
-                  <td
-                    colSpan="12"
-                    className="px-4 py-8 text-center text-slate-500"
-                  >
-                    Loading analytics from Google Sheets...
+                  <td colSpan="10" className="px-4 py-8 text-center text-slate-500">
+                    Loading payroll center...
                   </td>
                 </tr>
-              ) : salaryRows.length === 0 ? (
+              ) : payrollRows.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan="12"
-                    className="px-4 py-8 text-center text-slate-500"
-                  >
-                    No agent found.
+                  <td colSpan="10" className="px-4 py-8 text-center text-slate-500">
+                    No payroll data found.
                   </td>
                 </tr>
               ) : (
-                salaryRows.map((agent) => (
+                payrollRows.map((agent) => (
                   <tr key={agent.agentId} className="text-slate-300">
-                    <td className="px-4 py-4 text-white">
-                      {agent.agentName}
+                    <td className="px-4 py-4">
+                      <p className="font-bold text-white">{agent.agentName}</p>
+                      <p className="text-xs text-cyan-300">{agent.agentId}</p>
+                      <p className="text-xs text-slate-500">
+                        Entry {agent.entryTime} · Base {formatPKR(agent.baseSalary)}
+                      </p>
+                      <p className="text-xs text-slate-600">
+                        1 day = {formatPKR(agent.dailySalary)}
+                      </p>
                     </td>
+
+                    <td className="px-4 py-4 text-white">{agent.totalDays}</td>
+                    <td className="px-4 py-4 text-green-300">{agent.activeDays}</td>
+                    <td className="px-4 py-4 text-yellow-300">{agent.late}</td>
+                    <td className="px-4 py-4 text-emerald-300">{agent.onTime}</td>
+                    <td className="px-4 py-4 text-orange-300">{agent.halfDays}</td>
+                    <td className="px-4 py-4 text-red-300">{agent.absent}</td>
                     <td className="px-4 py-4 text-cyan-300">
-                      {agent.agentId}
-                    </td>
-                    <td className="px-4 py-4">
-                      {formatPKR(agent.monthlySalary)}
-                    </td>
-                    <td className="px-4 py-4">{agent.workingDays}</td>
-                    <td className="px-4 py-4 text-green-300">
-                      {agent.presentDays}
+                      {formatPKR(agent.commission)}
                     </td>
                     <td className="px-4 py-4 text-red-300">
-                      {agent.absentDays}
+                      {formatPKR(agent.deduction)}
                     </td>
-                    <td className="px-4 py-4">
-                      {formatPKR(agent.dailySalary)}
-                    </td>
-                    <td className="px-4 py-4 font-semibold text-yellow-300">
-                      {formatPKR(agent.earnedSalary)}
-                    </td>
-                    <td className="px-4 py-4">{agent.totalLeads}</td>
-                    <td className="px-4 py-4 text-emerald-300">
-                      {agent.approvedLeads}
-                    </td>
-                    <td className="px-4 py-4 text-yellow-300">
-                      {agent.pendingLeads}
-                    </td>
-                    <td className="px-4 py-4 text-red-300">
-                      {agent.rejectedLeads}
+                    <td className="px-4 py-4 font-black text-white">
+                      {formatPKR(agent.finalSalary)}
                     </td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-yellow-300/15 bg-yellow-300/[0.04] px-4 py-3 text-xs leading-relaxed text-slate-400">
+          Salary rule: Late = daily salary / 3. Half day = daily salary / 2. Absent = full daily salary. Final salary = base salary - deductions + commission.
         </div>
       </section>
     </AdminShell>
