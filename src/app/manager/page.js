@@ -10,8 +10,6 @@ import {
   Activity,
   RefreshCcw,
   LogOut,
-  Bath,
-  Video,
 } from "lucide-react";
 
 function getTodayKey() {
@@ -62,18 +60,43 @@ function normalizeTime(value) {
   return raw;
 }
 
-function statusBadgeClass(status) {
-  const cleanStatus = String(status || "Pending").toLowerCase();
+function normalizeStatus(value, logoutTime) {
+  if (logoutTime && logoutTime !== "-") return "Checked Out";
 
-  if (cleanStatus === "approved") {
+  const status = String(value || "Active").trim();
+  if (!status || status === "-") return "Active";
+
+  return status;
+}
+
+function statusBadgeClass(status) {
+  const cleanStatus = String(status || "Active").toLowerCase();
+
+  if (cleanStatus === "active") {
     return "border-emerald-400/20 bg-emerald-400/10 text-emerald-300";
   }
 
-  if (cleanStatus === "rejected") {
+  if (cleanStatus === "break") {
+    return "border-yellow-400/20 bg-yellow-400/10 text-yellow-300";
+  }
+
+  if (cleanStatus === "washroom") {
+    return "border-purple-400/20 bg-purple-400/10 text-purple-300";
+  }
+
+  if (cleanStatus === "in meeting" || cleanStatus === "meeting") {
+    return "border-blue-400/20 bg-blue-400/10 text-blue-300";
+  }
+
+  if (cleanStatus === "checked out") {
+    return "border-orange-400/20 bg-orange-400/10 text-orange-300";
+  }
+
+  if (cleanStatus === "auto logged out") {
     return "border-red-400/20 bg-red-400/10 text-red-300";
   }
 
-  return "border-yellow-400/20 bg-yellow-400/10 text-yellow-300";
+  return "border-slate-400/20 bg-slate-400/10 text-slate-300";
 }
 
 export default function ManagerDashboardPage() {
@@ -124,15 +147,6 @@ export default function ManagerDashboardPage() {
   const todayKey = getTodayKey();
   const monthKey = todayKey.slice(0, 7);
 
-  const agents = useMemo(() => {
-    return agentRows.filter((user) => {
-      const role = String(user.Role || "").toLowerCase();
-      const status = String(user.Status || "Active").toLowerCase();
-
-      return role === "agent" && status !== "inactive";
-    });
-  }, [agentRows]);
-
   const todayAttendanceRows = useMemo(() => {
     return attendanceRows.filter((row) => normalizeDate(row.Date) === todayKey);
   }, [attendanceRows, todayKey]);
@@ -155,7 +169,9 @@ export default function ManagerDashboardPage() {
   }, [todayAttendanceRows]);
 
   const monthlyLeads = useMemo(() => {
-    return leadRows.filter((lead) => normalizeDate(lead.Date).slice(0, 7) === monthKey);
+    return leadRows.filter(
+      (lead) => normalizeDate(lead.Date).slice(0, 7) === monthKey
+    );
   }, [leadRows, monthKey]);
 
   const pendingLeads = useMemo(() => {
@@ -165,55 +181,43 @@ export default function ManagerDashboardPage() {
     });
   }, [leadRows]);
 
-  const washroomAgents = useMemo(() => {
-    const ids = new Set();
-
-    todayAttendanceRows.forEach((row) => {
-      if (String(row.Status || "").toLowerCase() === "washroom") {
-        ids.add(String(row.AgentID || "").toUpperCase());
-      }
-    });
-
-    return ids.size;
-  }, [todayAttendanceRows]);
-
-  const meetingAgents = useMemo(() => {
-    const ids = new Set();
-
-    todayAttendanceRows.forEach((row) => {
-      if (String(row.Status || "").toLowerCase() === "meeting") {
-        ids.add(String(row.AgentID || "").toUpperCase());
-      }
-    });
-
-    return ids.size;
-  }, [todayAttendanceRows]);
-
   const autoLogoutAgents = useMemo(() => {
     const ids = new Set();
 
     todayAttendanceRows.forEach((row) => {
-      if (String(row.Status || "").toLowerCase() === "auto logged out") {
-        ids.add(String(row.AgentID || "").toUpperCase());
+      const status = String(row.Status || "").toLowerCase();
+      const agentId = String(row.AgentID || "").toUpperCase();
+
+      if (!agentId) return;
+
+      if (status === "auto logged out") {
+        ids.add(agentId);
       }
     });
 
     return ids.size;
   }, [todayAttendanceRows]);
 
-  const recentLeadActivity = useMemo(() => {
-    return [...leadRows]
-      .reverse()
-      .slice(0, 8)
-      .map((lead, index) => ({
-        id: `${lead.AgentID || "agent"}-${lead.LeadName || "lead"}-${index}`,
-        agent: lead.AgentName || lead.AgentID || "-",
-        lead: lead.LeadName || "-",
-        company: lead.Company || "-",
-        status: lead.ApprovalStatus || "Pending",
-        time: normalizeTime(lead.Time),
-      }));
-  }, [leadRows]);
+  const liveAgentActivity = useMemo(() => {
+    return todayAttendanceRows
+      .map((row, index) => {
+        const logoutAt = normalizeTime(row.LogoutTime);
+        const status = normalizeStatus(row.Status, logoutAt);
+
+        return {
+          rowKey: `${row.AgentID || "agent"}-${row.Date || "date"}-${
+            row.LoginTime || "login"
+          }-${index}`,
+          agent: row.AgentName || "Agent",
+          agentId: row.AgentID || "-",
+          status,
+          loginAt: normalizeTime(row.LoginTime),
+          logoutAt,
+          updatedAt: normalizeTime(row.UpdatedAt),
+        };
+      })
+      .reverse();
+  }, [todayAttendanceRows]);
 
   return (
     <ManagerShell>
@@ -234,11 +238,11 @@ export default function ManagerDashboardPage() {
         </button>
       </div>
 
-      <div className="grid gap-5 md:grid-cols-3">
+      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Active Agents Today"
           value={loading ? "..." : activeAgentsToday}
-          subtitle="Agents currently working today"
+          subtitle="Active, break, washroom, meeting"
           icon={Users}
         />
 
@@ -257,20 +261,6 @@ export default function ManagerDashboardPage() {
         />
 
         <StatCard
-          title="Agents In Washroom"
-          value={loading ? "..." : washroomAgents}
-          subtitle="Current live status"
-          icon={Bath}
-        />
-
-        <StatCard
-          title="Agents In Meeting"
-          value={loading ? "..." : meetingAgents}
-          subtitle="Current live status"
-          icon={Video}
-        />
-
-        <StatCard
           title="Auto Logout Agents"
           value={loading ? "..." : autoLogoutAgents}
           subtitle="Inactive agents today"
@@ -282,15 +272,15 @@ export default function ManagerDashboardPage() {
         <div className="mb-5 flex items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.35em] text-cyan-300">
-              Live Leads Activity
+              Live Agent Activity
             </p>
 
             <h2 className="mt-2 text-2xl font-black text-white">
-              Recent Agent Submissions
+              Today Floor Status
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Live data from Google Sheets Leads tab.
+              Live attendance status from Google Sheets Attendance tab.
             </p>
           </div>
 
@@ -300,46 +290,68 @@ export default function ManagerDashboardPage() {
         </div>
 
         <div className="overflow-hidden overflow-x-auto rounded-2xl border border-white/10">
-          <table className="w-full min-w-[850px] text-left text-sm">
+          <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="bg-white/[0.04] text-xs uppercase tracking-[0.22em] text-cyan-300">
               <tr>
                 <th className="px-5 py-4">Agent</th>
-                <th className="px-5 py-4">Lead Name</th>
-                <th className="px-5 py-4">Company</th>
+                <th className="px-5 py-4">Login ID</th>
                 <th className="px-5 py-4">Status</th>
-                <th className="px-5 py-4">Time</th>
+                <th className="px-5 py-4">Login At</th>
+                <th className="px-5 py-4">Logout At</th>
+                <th className="px-5 py-4">Updated</th>
               </tr>
             </thead>
 
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="5" className="px-5 py-8 text-center text-slate-500">
-                    Loading live lead activity...
+                  <td
+                    colSpan="6"
+                    className="px-5 py-8 text-center text-slate-500"
+                  >
+                    Loading live agent activity...
                   </td>
                 </tr>
-              ) : recentLeadActivity.length === 0 ? (
+              ) : liveAgentActivity.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="px-5 py-8 text-center text-slate-500">
-                    No lead submissions found.
+                  <td
+                    colSpan="6"
+                    className="px-5 py-8 text-center text-slate-500"
+                  >
+                    No attendance activity found for today.
                   </td>
                 </tr>
               ) : (
-                recentLeadActivity.map((lead) => (
-                  <tr key={lead.id} className="border-t border-white/10 text-slate-300">
-                    <td className="px-5 py-4 font-bold text-white">{lead.agent}</td>
-                    <td className="px-5 py-4">{lead.lead}</td>
-                    <td className="px-5 py-4">{lead.company}</td>
+                liveAgentActivity.map((agent) => (
+                  <tr
+                    key={agent.rowKey}
+                    className="border-t border-white/10 text-slate-300"
+                  >
+                    <td className="px-5 py-4 font-bold text-white">
+                      {agent.agent}
+                    </td>
+
+                    <td className="px-5 py-4 text-cyan-300">
+                      {agent.agentId}
+                    </td>
+
                     <td className="px-5 py-4">
                       <span
                         className={`rounded-full border px-3 py-1 text-xs font-bold ${statusBadgeClass(
-                          lead.status
+                          agent.status
                         )}`}
                       >
-                        {lead.status}
+                        {agent.status}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-slate-500">{lead.time}</td>
+
+                    <td className="px-5 py-4">{agent.loginAt}</td>
+
+                    <td className="px-5 py-4">{agent.logoutAt}</td>
+
+                    <td className="px-5 py-4 text-slate-500">
+                      {agent.updatedAt}
+                    </td>
                   </tr>
                 ))
               )}

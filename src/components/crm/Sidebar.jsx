@@ -11,6 +11,7 @@ import {
   Bath,
   BriefcaseBusiness,
   BarChart3,
+  Video,
 } from "lucide-react";
 
 import { sheetsPost } from "@/lib/sheetsApi";
@@ -154,6 +155,14 @@ export default function Sidebar() {
         >
           <Bath size={15} />
           Washroom
+        </button>
+
+        <button
+          onClick={() => updateAgentStatus("In Meeting")}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-400/20 bg-blue-400/10 px-3 py-2.5 text-xs font-medium text-blue-200 transition hover:bg-blue-400/15"
+        >
+          <Video size={15} />
+          In Meeting
         </button>
 
         <button

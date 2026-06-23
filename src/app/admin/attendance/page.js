@@ -13,6 +13,7 @@ import {
   RefreshCcw,
   CalendarPlus,
   Trash2,
+  Video,
 } from "lucide-react";
 
 import AdminShell from "@/components/admin/AdminShell";
@@ -141,8 +142,9 @@ export default function AttendancePage() {
 
   const selectedHoliday = useMemo(() => {
     return (
-      holidayRows.find((holiday) => normalizeDate(holiday.Date) === selectedDate) ||
-      null
+      holidayRows.find(
+        (holiday) => normalizeDate(holiday.Date) === selectedDate
+      ) || null
     );
   }, [holidayRows, selectedDate]);
 
@@ -173,6 +175,7 @@ export default function AttendancePage() {
   const active = records.filter((x) => x.status === "Active").length;
   const onBreak = records.filter((x) => x.status === "Break").length;
   const washroom = records.filter((x) => x.status === "Washroom").length;
+  const inMeeting = records.filter((x) => x.status === "In Meeting").length;
   const checkedOut = records.filter((x) => x.status === "Checked Out").length;
 
   const recentRecords = records
@@ -255,7 +258,8 @@ export default function AttendancePage() {
             <h1 className="text-4xl font-black text-white">Attendance</h1>
 
             <p className="mt-2 text-xs text-slate-500">
-              Historical selected-date view. Holidays added here are excluded from payroll.
+              Historical selected-date view. Holidays added here are excluded
+              from payroll.
             </p>
           </div>
 
@@ -371,12 +375,48 @@ export default function AttendancePage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <Stat title="Present" value={loading ? "..." : present} icon={UserCheck} tone="emerald" />
-        <Stat title="Active Now" value={loading ? "..." : active} icon={Clock3} tone="cyan" />
-        <Stat title="On Break" value={loading ? "..." : onBreak} icon={Coffee} tone="yellow" />
-        <Stat title="Washroom" value={loading ? "..." : washroom} icon={Bath} tone="purple" />
-        <Stat title="Checked Out" value={loading ? "..." : checkedOut} icon={LogOut} tone="orange" />
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+        <Stat
+          title="Present"
+          value={loading ? "..." : present}
+          icon={UserCheck}
+          tone="emerald"
+        />
+
+        <Stat
+          title="Active Now"
+          value={loading ? "..." : active}
+          icon={Clock3}
+          tone="cyan"
+        />
+
+        <Stat
+          title="On Break"
+          value={loading ? "..." : onBreak}
+          icon={Coffee}
+          tone="yellow"
+        />
+
+        <Stat
+          title="Washroom"
+          value={loading ? "..." : washroom}
+          icon={Bath}
+          tone="purple"
+        />
+
+        <Stat
+          title="In Meeting"
+          value={loading ? "..." : inMeeting}
+          icon={Video}
+          tone="blue"
+        />
+
+        <Stat
+          title="Checked Out"
+          value={loading ? "..." : checkedOut}
+          icon={LogOut}
+          tone="orange"
+        />
       </div>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.5fr_0.8fr]">
@@ -403,27 +443,37 @@ export default function AttendancePage() {
               <tbody className="divide-y divide-white/10">
                 {loading ? (
                   <tr>
-                    <td colSpan="6" className="px-5 py-8 text-center text-slate-500">
+                    <td
+                      colSpan="6"
+                      className="px-5 py-8 text-center text-slate-500"
+                    >
                       Loading attendance records...
                     </td>
                   </tr>
                 ) : records.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="px-5 py-8 text-center text-slate-500">
+                    <td
+                      colSpan="6"
+                      className="px-5 py-8 text-center text-slate-500"
+                    >
                       No records found for selected date.
                     </td>
                   </tr>
                 ) : (
                   records.map((agent) => (
                     <tr key={agent.rowKey} className="text-slate-300">
-                      <td className="px-5 py-4 font-bold text-white">{agent.name}</td>
+                      <td className="px-5 py-4 font-bold text-white">
+                        {agent.name}
+                      </td>
                       <td className="px-5 py-4 text-cyan-300">{agent.id}</td>
                       <td className="px-5 py-4">{agent.loginAt}</td>
                       <td className="px-5 py-4">{agent.logoutAt}</td>
                       <td className="px-5 py-4">
                         <StatusPill status={agent.status} />
                       </td>
-                      <td className="px-5 py-4 text-slate-500">{agent.updatedAt}</td>
+                      <td className="px-5 py-4 text-slate-500">
+                        {agent.updatedAt}
+                      </td>
                     </tr>
                   ))
                 )}
@@ -454,7 +504,10 @@ export default function AttendancePage() {
               </div>
             ) : (
               recentRecords.map((item) => (
-                <div key={item.rowKey} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <div
+                  key={item.rowKey}
+                  className="rounded-2xl border border-white/10 bg-black/20 p-4"
+                >
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="font-bold text-white">{item.name}</p>
@@ -466,15 +519,18 @@ export default function AttendancePage() {
 
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-400">
                     <p>
-                      Login At: <span className="text-cyan-300">{item.loginAt}</span>
+                      Login At:{" "}
+                      <span className="text-cyan-300">{item.loginAt}</span>
                     </p>
 
                     <p>
-                      Logout At: <span className="text-cyan-300">{item.logoutAt}</span>
+                      Logout At:{" "}
+                      <span className="text-cyan-300">{item.logoutAt}</span>
                     </p>
 
                     <p className="col-span-2">
-                      Updated: <span className="text-cyan-300">{item.updatedAt}</span>
+                      Updated:{" "}
+                      <span className="text-cyan-300">{item.updatedAt}</span>
                     </p>
                   </div>
                 </div>
@@ -493,6 +549,7 @@ function Stat({ title, value, icon: Icon, tone }) {
     cyan: "text-cyan-300 bg-cyan-300/10",
     yellow: "text-yellow-300 bg-yellow-300/10",
     purple: "text-purple-300 bg-purple-300/10",
+    blue: "text-blue-300 bg-blue-300/10",
     orange: "text-orange-300 bg-orange-300/10",
   };
 
@@ -513,6 +570,7 @@ function StatusPill({ status }) {
     Active: "border-emerald-300/20 bg-emerald-300/10 text-emerald-300",
     Break: "border-yellow-300/20 bg-yellow-300/10 text-yellow-300",
     Washroom: "border-purple-300/20 bg-purple-300/10 text-purple-300",
+    "In Meeting": "border-blue-300/20 bg-blue-300/10 text-blue-300",
     "Checked Out": "border-orange-300/20 bg-orange-300/10 text-orange-300",
     "Auto Logged Out": "border-red-300/20 bg-red-300/10 text-red-300",
     Absent: "border-red-300/20 bg-red-300/10 text-red-300",

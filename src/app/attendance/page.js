@@ -23,23 +23,19 @@ function getTodayKey() {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-
   return `${year}-${month}-${day}`;
 }
 
 function normalizeDate(value) {
   if (!value) return "";
   const raw = String(value).trim();
-
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
 
   const date = new Date(value);
-
   if (!Number.isNaN(date.getTime())) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
-
     return `${year}-${month}-${day}`;
   }
 
@@ -49,11 +45,9 @@ function normalizeDate(value) {
 function normalizeTime(value) {
   if (!value) return "-";
   const raw = String(value).trim();
-
   if (!raw || raw === "-") return "-";
 
   const date = new Date(value);
-
   if (!Number.isNaN(date.getTime())) {
     return date.toLocaleTimeString([], {
       hour: "2-digit",
@@ -64,13 +58,23 @@ function normalizeTime(value) {
   return raw;
 }
 
+function parseDateTime(dateValue, timeValue) {
+  if (!dateValue || !timeValue || timeValue === "-") return null;
+
+  const date = normalizeDate(dateValue);
+  const time = normalizeTime(timeValue);
+  const parsed = new Date(`${date} ${time}`);
+
+  if (!Number.isNaN(parsed.getTime())) return parsed;
+
+  return null;
+}
+
 function parseTimeToMinutes(value) {
   const time = normalizeTime(value);
-
   if (!time || time === "-") return null;
 
   const match = time.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
-
   if (!match) return null;
 
   let hour = Number(match[1]);
@@ -85,7 +89,6 @@ function parseTimeToMinutes(value) {
 
 function formatMinutes(value) {
   const minutes = Number(value || 0);
-
   if (!minutes || minutes < 0) return "0m";
 
   const hrs = Math.floor(minutes / 60);
@@ -93,6 +96,24 @@ function formatMinutes(value) {
 
   if (!hrs) return `${mins}m`;
   return `${hrs}h ${mins}m`;
+}
+
+function getLiveScreenMinutes(attendance) {
+  if (!attendance) return 0;
+
+  const savedScreen = Number(attendance.TotalScreenMinutes || 0);
+  const inactive = Number(attendance.TotalInactiveMinutes || 0);
+  const status = attendance.Status || "Active";
+
+  if (status === "Checked Out") return savedScreen;
+
+  const loginDateTime = parseDateTime(attendance.Date, attendance.LoginTime);
+  if (!loginDateTime) return savedScreen;
+
+  const diff = Math.max(0, Date.now() - loginDateTime.getTime());
+  const totalMinutes = Math.floor(diff / 60000);
+
+  return Math.max(0, totalMinutes - inactive);
 }
 
 function getMonthKey(dateKey = getTodayKey()) {
@@ -125,11 +146,9 @@ function isWeekend(dayInfo) {
 
 function isLate(loginTime) {
   const minutes = parseTimeToMinutes(loginTime);
-
   if (minutes === null) return false;
 
   const lateLimit = LATE_LIMIT_HOUR * 60 + LATE_LIMIT_MINUTE;
-
   return minutes > lateLimit;
 }
 
@@ -137,11 +156,8 @@ function getDayStatus(dayInfo, attendanceRow) {
   const today = getTodayKey();
 
   if (isWeekend(dayInfo)) return "Off";
-
   if (dayInfo.dateKey > today) return "Upcoming";
-
   if (!attendanceRow) return "Absent";
-
   if (isLate(attendanceRow.LoginTime)) return "Late";
 
   return "Present";
@@ -153,7 +169,6 @@ function pickLatestRowsByDate(rows) {
   rows.forEach((row) => {
     const date = normalizeDate(row.Date);
     if (!date) return;
-
     map.set(date, row);
   });
 
@@ -163,8 +178,10 @@ function pickLatestRowsByDate(rows) {
 export default function AttendancePage() {
   const [agentId, setAgentId] = useState("");
   const [agentName, setAgentName] = useState("Agent");
+  const [currentStatus, setCurrentStatus] = useState("Active");
   const [attendanceRows, setAttendanceRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [tick, setTick] = useState(0);
 
   const today = getTodayKey();
   const monthKey = getMonthKey(today);
@@ -185,6 +202,12 @@ export default function AttendancePage() {
       );
 
       setAttendanceRows(agentRows);
+
+      const latestRow = agentRows[agentRows.length - 1] || null;
+      if (latestRow?.Status) {
+        setCurrentStatus(latestRow.Status);
+        localStorage.setItem(`crmCurrentStatus:${userId}`, latestRow.Status);
+      }
     } catch (error) {
       console.error("Agent attendance read failed:", error);
       setAttendanceRows([]);
@@ -202,17 +225,41 @@ export default function AttendancePage() {
     setAgentId(userId);
     setAgentName(userName || "Agent");
 
+    const savedStatus =
+      localStorage.getItem(`crmCurrentStatus:${userId}`) || "Active";
+
+    setCurrentStatus(savedStatus);
+
+    function syncStatusFromStorage() {
+      const nextStatus =
+        localStorage.getItem(`crmCurrentStatus:${userId}`) || "Active";
+
+      setCurrentStatus(nextStatus);
+    }
+
+    window.addEventListener("crm-status-change", syncStatusFromStorage);
+
     loadAttendance(userId);
 
-    const interval = setInterval(() => {
+    const refreshInterval = setInterval(() => {
       loadAttendance(userId);
     }, 10000);
 
-    return () => clearInterval(interval);
+    const liveInterval = setInterval(() => {
+      setTick((value) => value + 1);
+    }, 1000);
+
+    return () => {
+      clearInterval(refreshInterval);
+      clearInterval(liveInterval);
+      window.removeEventListener("crm-status-change", syncStatusFromStorage);
+    };
   }, []);
 
   const monthlyRows = useMemo(() => {
-    return attendanceRows.filter((row) => normalizeDate(row.Date).startsWith(monthKey));
+    return attendanceRows.filter((row) =>
+      normalizeDate(row.Date).startsWith(monthKey)
+    );
   }, [attendanceRows, monthKey]);
 
   const rowsByDate = useMemo(() => {
@@ -225,16 +272,9 @@ export default function AttendancePage() {
 
   const todayRow = rowsByDate.get(today) || null;
 
-  const todayStatus = todayRow
-    ? todayRow.Status || "Active"
-    : isWeekend({
-        weekday: new Date().getDay(),
-      })
-    ? "Off"
-    : "Absent";
-
+  const todayStatus = todayRow?.Status || currentStatus || "Active";
   const checkIn = normalizeTime(todayRow?.LoginTime);
-  const workHours = formatMinutes(todayRow?.TotalScreenMinutes);
+  const workHours = formatMinutes(getLiveScreenMinutes(todayRow));
 
   const report = useMemo(() => {
     let present = 0;
@@ -253,10 +293,14 @@ export default function AttendancePage() {
       if (status === "Late") late += 1;
       if (status === "Absent") absent += 1;
       if (status === "Off") off += 1;
-
       if (row?.LastAutoLogout) autoLogouts += 1;
 
-      totalScreen += Number(row?.TotalScreenMinutes || 0);
+      if (normalizeDate(row?.Date) === today) {
+        totalScreen += getLiveScreenMinutes(row);
+      } else {
+        totalScreen += Number(row?.TotalScreenMinutes || 0);
+      }
+
       totalInactive += Number(row?.TotalInactiveMinutes || 0);
     });
 
@@ -269,7 +313,7 @@ export default function AttendancePage() {
       totalScreen,
       totalInactive,
     };
-  }, [monthDays, rowsByDate]);
+  }, [monthDays, rowsByDate, today, tick]);
 
   return (
     <PageShell title="Attendance" subtitle={`Monthly report for ${agentName}`}>
@@ -293,9 +337,19 @@ export default function AttendancePage() {
           <StatBox
             title="Status"
             value={todayStatus}
-            sub="Current attendance state"
+            sub="Live current state"
             icon={UserCheck}
-            tone={todayStatus === "Absent" ? "red" : todayStatus === "Late" ? "yellow" : "emerald"}
+            tone={
+              todayStatus === "Checked Out" || todayStatus === "Auto Logged Out"
+                ? "red"
+                : todayStatus === "Break"
+                ? "yellow"
+                : todayStatus === "Washroom"
+                ? "purple"
+                : todayStatus === "In Meeting"
+                ? "blue"
+                : "emerald"
+            }
           />
 
           <StatBox
@@ -309,7 +363,7 @@ export default function AttendancePage() {
           <StatBox
             title="Work Hours"
             value={workHours}
-            sub="Total screen time"
+            sub="Live screen time"
             icon={CalendarClock}
             tone="yellow"
           />
@@ -341,47 +395,12 @@ export default function AttendancePage() {
           </div>
 
           <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-            <MiniReportCard
-              title="Present"
-              value={report.present}
-              icon={CalendarCheck}
-              tone="emerald"
-            />
-
-            <MiniReportCard
-              title="Late"
-              value={report.late}
-              icon={AlertTriangle}
-              tone="yellow"
-            />
-
-            <MiniReportCard
-              title="Absent"
-              value={report.absent}
-              icon={XCircle}
-              tone="red"
-            />
-
-            <MiniReportCard
-              title="Off"
-              value={report.off}
-              icon={CalendarDays}
-              tone="slate"
-            />
-
-            <MiniReportCard
-              title="Screen Time"
-              value={formatMinutes(report.totalScreen)}
-              icon={Activity}
-              tone="cyan"
-            />
-
-            <MiniReportCard
-              title="Inactive"
-              value={formatMinutes(report.totalInactive)}
-              icon={TimerOff}
-              tone="purple"
-            />
+            <MiniReportCard title="Present" value={report.present} icon={CalendarCheck} tone="emerald" />
+            <MiniReportCard title="Late" value={report.late} icon={AlertTriangle} tone="yellow" />
+            <MiniReportCard title="Absent" value={report.absent} icon={XCircle} tone="red" />
+            <MiniReportCard title="Off" value={report.off} icon={CalendarDays} tone="slate" />
+            <MiniReportCard title="Screen Time" value={formatMinutes(report.totalScreen)} icon={Activity} tone="cyan" />
+            <MiniReportCard title="Inactive" value={formatMinutes(report.totalInactive)} icon={TimerOff} tone="purple" />
           </div>
 
           <div className="mt-5 overflow-hidden rounded-2xl border border-white/10">
@@ -403,6 +422,11 @@ export default function AttendancePage() {
                 const dayStatus = getDayStatus(dayInfo, row);
                 const style = statusStyle(dayStatus);
 
+                const dayWorkMinutes =
+                  dayInfo.dateKey === today
+                    ? getLiveScreenMinutes(row)
+                    : Number(row?.TotalScreenMinutes || 0);
+
                 return (
                   <div
                     key={dayInfo.dateKey}
@@ -413,31 +437,20 @@ export default function AttendancePage() {
                         {String(dayInfo.day).padStart(2, "0")}
                       </span>
 
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${style.badge}`}
-                      >
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${style.badge}`}>
                         {dayStatus}
                       </span>
                     </div>
 
                     <div className="space-y-1 text-[10px] text-slate-500">
                       <p>
-                        In:{" "}
-                        <span className="text-slate-300">
-                          {normalizeTime(row?.LoginTime)}
-                        </span>
+                        In: <span className="text-slate-300">{normalizeTime(row?.LoginTime)}</span>
                       </p>
                       <p>
-                        Out:{" "}
-                        <span className="text-slate-300">
-                          {normalizeTime(row?.LogoutTime)}
-                        </span>
+                        Out: <span className="text-slate-300">{normalizeTime(row?.LogoutTime)}</span>
                       </p>
                       <p>
-                        Work:{" "}
-                        <span className="text-cyan-300">
-                          {formatMinutes(row?.TotalScreenMinutes)}
-                        </span>
+                        Work: <span className="text-cyan-300">{formatMinutes(dayWorkMinutes)}</span>
                       </p>
                     </div>
                   </div>
@@ -487,6 +500,8 @@ function StatBox({ title, value, sub, icon: Icon, tone }) {
     cyan: "border-cyan-300/20 bg-cyan-300/10 text-cyan-300",
     yellow: "border-yellow-300/20 bg-yellow-300/10 text-yellow-300",
     red: "border-red-300/20 bg-red-300/10 text-red-300",
+    purple: "border-purple-300/20 bg-purple-300/10 text-purple-300",
+    blue: "border-blue-300/20 bg-blue-300/10 text-blue-300",
   };
 
   return (

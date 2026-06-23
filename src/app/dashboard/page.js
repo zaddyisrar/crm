@@ -325,15 +325,11 @@ export default function DashboardPage() {
 
       await sheetsPost({
         action: "addLead",
-
         date: newLead.date,
         time: newLead.time,
-
         agentId,
         agentName,
-
         leadName: newLead.name,
-
         company: newLead.company,
         phone: newLead.phone,
         email: newLead.email,
@@ -381,7 +377,9 @@ export default function DashboardPage() {
           >
             <RefreshCcw
               size={13}
-              className={leadsLoading || attendanceLoading ? "animate-spin" : ""}
+              className={
+                leadsLoading || attendanceLoading ? "animate-spin" : ""
+              }
             />
             Refresh
           </button>
@@ -429,7 +427,9 @@ export default function DashboardPage() {
           <DashboardCard
             label="Screen Time"
             value={formatMinutes(screenMinutes)}
-            note={checkInTime !== "-" ? `Checked in at ${checkInTime}` : "Not started"}
+            note={
+              checkInTime !== "-" ? `Checked in at ${checkInTime}` : "Not started"
+            }
             icon={Activity}
             tone="text-yellow-300"
           />
@@ -661,6 +661,11 @@ function StatusBadge({ status }) {
       text: "Washroom",
       icon: Bath,
       className: "border-purple-300/20 bg-purple-300/10 text-purple-300",
+    },
+    "In Meeting": {
+      text: "In Meeting",
+      icon: BriefcaseBusiness,
+      className: "border-blue-300/20 bg-blue-300/10 text-blue-300",
     },
     "Auto Logged Out": {
       text: "Auto Logged Out",
