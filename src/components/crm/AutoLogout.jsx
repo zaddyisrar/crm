@@ -5,6 +5,7 @@ import { sheetsPost } from "@/lib/sheetsApi";
 
 const AUTO_LOGOUT_ENABLED = true;
 const INACTIVITY_LIMIT = 5 * 60 * 1000;
+const WARNING_BEFORE_LOGOUT = 30 * 1000;
 const SHIFT_CHECK_INTERVAL = 30 * 1000;
 
 function normalizeTime(value) {
@@ -63,6 +64,54 @@ function getTimeNow() {
   });
 }
 
+function canUseNotification() {
+  return typeof window !== "undefined" && "Notification" in window;
+}
+
+async function requestNotificationPermission() {
+  if (!canUseNotification()) return false;
+
+  if (Notification.permission === "granted") return true;
+
+  if (Notification.permission !== "denied") {
+    const permission = await Notification.requestPermission();
+    return permission === "granted";
+  }
+
+  return false;
+}
+
+function sendBrowserNotification(title, body) {
+  if (!canUseNotification()) return;
+
+  if (Notification.permission !== "granted") return;
+
+  try {
+    new Notification(title, {
+      body,
+      icon: "/crm-logo.png",
+      badge: "/crm-logo.png",
+    });
+  } catch (error) {
+    console.error("Browser notification failed:", error);
+  }
+}
+
+function sendWindowAlert(message) {
+  try {
+    window.dispatchEvent(
+      new CustomEvent("crm-system-notification", {
+        detail: {
+          message,
+          time: getTimeNow(),
+        },
+      })
+    );
+  } catch (error) {
+    console.error("CRM notification event failed:", error);
+  }
+}
+
 export default function AutoLogout() {
   useEffect(() => {
     if (!AUTO_LOGOUT_ENABLED) return;
@@ -74,10 +123,14 @@ export default function AutoLogout() {
     if (role !== "agent" || !userId) return;
 
     let inactivityTimer;
+    let warningTimer;
     let shiftTimer;
     let shiftEndTime = "";
     let shiftCheckoutStarted = false;
     let autoLogoutStarted = false;
+    let warningShown = false;
+
+    requestNotificationPermission();
 
     async function loadAgentShift() {
       try {
@@ -100,16 +153,32 @@ export default function AutoLogout() {
     }
 
     function getCurrentStatus() {
-      return (
-        localStorage.getItem(`crmCurrentStatus:${userId}`) ||
-        "Active"
-      );
+      return localStorage.getItem(`crmCurrentStatus:${userId}`) || "Active";
     }
 
     function clearLoginStorage() {
       localStorage.removeItem("crmRole");
       localStorage.removeItem("crmUserId");
       localStorage.removeItem("crmUserName");
+    }
+
+    function showInactivityWarning() {
+      if (warningShown || autoLogoutStarted || shiftCheckoutStarted) return;
+
+      const status = getCurrentStatus();
+
+      if (status !== "Active") return;
+
+      warningShown = true;
+
+      sendBrowserNotification(
+        "CRM Auto Logout Warning",
+        "You will be auto logged out in 30 seconds due to inactivity."
+      );
+
+      sendWindowAlert(
+        "You will be auto logged out in 30 seconds due to inactivity."
+      );
     }
 
     async function autoCheckoutByShiftEnd() {
@@ -128,6 +197,15 @@ export default function AutoLogout() {
       localStorage.setItem(`crmCurrentStatus:${userId}`, "Checked Out");
       window.dispatchEvent(new Event("crm-status-change"));
 
+      sendBrowserNotification(
+        "Shift Ended",
+        "Your shift has ended. CRM has checked you out automatically."
+      );
+
+      sendWindowAlert(
+        "Your shift has ended. CRM has checked you out automatically."
+      );
+
       try {
         await sheetsPost({
           action: "autoCheckout",
@@ -140,11 +218,14 @@ export default function AutoLogout() {
       }
 
       clearTimeout(inactivityTimer);
+      clearTimeout(warningTimer);
       clearInterval(shiftTimer);
 
       clearLoginStorage();
 
-      window.location.href = "/login?reason=shift-ended";
+      setTimeout(() => {
+        window.location.href = "/login?reason=shift-ended";
+      }, 1200);
     }
 
     async function autoLogoutByInactivity() {
@@ -159,6 +240,13 @@ export default function AutoLogout() {
 
       autoLogoutStarted = true;
 
+      sendBrowserNotification(
+        "CRM Auto Logout",
+        "You have been logged out due to inactivity."
+      );
+
+      sendWindowAlert("You have been logged out due to inactivity.");
+
       try {
         await sheetsPost({
           action: "autoLogout",
@@ -171,11 +259,22 @@ export default function AutoLogout() {
 
       clearLoginStorage();
 
-      window.location.href = "/login?reason=inactive";
+      setTimeout(() => {
+        window.location.href = "/login?reason=inactive";
+      }, 1200);
     }
 
     function resetInactivityTimer() {
+      warningShown = false;
+
       clearTimeout(inactivityTimer);
+      clearTimeout(warningTimer);
+
+      warningTimer = setTimeout(
+        showInactivityWarning,
+        INACTIVITY_LIMIT - WARNING_BEFORE_LOGOUT
+      );
+
       inactivityTimer = setTimeout(autoLogoutByInactivity, INACTIVITY_LIMIT);
     }
 
@@ -197,6 +296,7 @@ export default function AutoLogout() {
 
     return () => {
       clearTimeout(inactivityTimer);
+      clearTimeout(warningTimer);
       clearInterval(shiftTimer);
 
       events.forEach((event) => {
