@@ -21,7 +21,6 @@ import {
 
 import PageShell from "@/components/crm/PageShell";
 import { sheetsPost } from "@/lib/sheetsApi";
-import { clientOptions } from "@/data/clients";
 
 function formatAgentName(value) {
   if (!value) return "Agent";
@@ -152,6 +151,15 @@ function convertSheetLead(lead, index) {
   };
 }
 
+function convertSheetClient(client, index) {
+  return {
+    id: client.ClientID || `client-${index}`,
+    name: client.ClientName || "",
+    company: client.Company || "",
+    status: client.Status || "Active",
+  };
+}
+
 export default function DashboardPage() {
   const [agentId, setAgentId] = useState("");
   const [agentName, setAgentName] = useState("Agent");
@@ -160,7 +168,9 @@ export default function DashboardPage() {
   const [attendance, setAttendance] = useState(null);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
 
-  const [selectedClient, setSelectedClient] = useState(clientOptions[0]);
+  const [clients, setClients] = useState([]);
+  const [clientsLoading, setClientsLoading] = useState(false);
+  const [selectedClient, setSelectedClient] = useState(null);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
 
@@ -177,6 +187,40 @@ export default function DashboardPage() {
     address: "",
     note: "",
   });
+
+  async function loadClients() {
+    try {
+      setClientsLoading(true);
+
+      const response = await sheetsPost({
+        action: "getClients",
+      });
+
+      const activeClients = (response?.data || [])
+        .filter((client) => String(client.Status || "Active") !== "Inactive")
+        .map(convertSheetClient);
+
+      setClients(activeClients);
+
+      setSelectedClient((current) => {
+        if (current) {
+          const stillExists = activeClients.find(
+            (client) => client.id === current.id
+          );
+
+          if (stillExists) return stillExists;
+        }
+
+        return activeClients[0] || null;
+      });
+    } catch (error) {
+      console.error("Client load failed:", error);
+      setClients([]);
+      setSelectedClient(null);
+    } finally {
+      setClientsLoading(false);
+    }
+  }
 
   async function loadAgentLeads(userId = agentId) {
     if (!userId) return;
@@ -259,10 +303,12 @@ export default function DashboardPage() {
 
     window.addEventListener("crm-status-change", syncStatusFromStorage);
 
+    loadClients();
     loadAgentLeads(userId);
     loadAgentAttendance(userId);
 
     const interval = setInterval(() => {
+      loadClients();
       loadAgentLeads(userId);
       loadAgentAttendance(userId);
     }, 10000);
@@ -273,7 +319,7 @@ export default function DashboardPage() {
     };
   }, []);
 
-  const filteredClients = clientOptions.filter((client) => {
+  const filteredClients = clients.filter((client) => {
     const search = clientSearch.toLowerCase();
 
     return (
@@ -357,6 +403,10 @@ export default function DashboardPage() {
 
   function selectClient(client) {
     setSelectedClient(client);
+    setForm((prev) => ({
+      ...prev,
+      company: client.company || prev.company,
+    }));
     setIsClientModalOpen(false);
     setClientSearch("");
   }
@@ -369,16 +419,19 @@ export default function DashboardPage() {
 
           <button
             onClick={() => {
+              loadClients();
               loadAgentLeads(agentId);
               loadAgentAttendance(agentId);
             }}
-            disabled={leadsLoading || attendanceLoading}
+            disabled={leadsLoading || attendanceLoading || clientsLoading}
             className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] font-medium text-slate-300 hover:border-cyan-300/25 hover:text-cyan-100 disabled:opacity-60"
           >
             <RefreshCcw
               size={13}
               className={
-                leadsLoading || attendanceLoading ? "animate-spin" : ""
+                leadsLoading || attendanceLoading || clientsLoading
+                  ? "animate-spin"
+                  : ""
               }
             />
             Refresh
@@ -391,10 +444,12 @@ export default function DashboardPage() {
               Agent Workspace
             </p>
             <h2 className="mt-0.5 truncate text-sm font-semibold text-white">
-              {selectedClient?.company || "Select Client"}
+              {clientsLoading
+                ? "Loading Clients..."
+                : selectedClient?.company || "Select Client"}
             </h2>
             <p className="text-[10px] text-slate-500">
-              Current client selected for calling workflow.
+              Clients are loaded live from Google Sheets.
             </p>
           </div>
 
@@ -411,7 +466,7 @@ export default function DashboardPage() {
           <DashboardCard
             label="Current Client"
             value={selectedClient?.company || "No Client"}
-            note={selectedClient?.name || "Select from list"}
+            note={selectedClient?.name || "Select from Sheets"}
             icon={Building2}
             tone="text-cyan-300"
           />
@@ -568,7 +623,7 @@ export default function DashboardPage() {
                   Select Client
                 </h3>
                 <p className="mt-1 text-xs text-slate-400">
-                  Choose from commercial cleaning client list.
+                  Choose from active clients in Google Sheets.
                 </p>
               </div>
 
@@ -632,9 +687,15 @@ export default function DashboardPage() {
                 ))}
               </div>
 
-              {filteredClients.length === 0 && (
+              {!clientsLoading && filteredClients.length === 0 && (
                 <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-8 text-center text-xs text-slate-500">
-                  No clients found.
+                  No active clients found.
+                </div>
+              )}
+
+              {clientsLoading && (
+                <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-8 text-center text-xs text-slate-500">
+                  Loading clients...
                 </div>
               )}
             </div>

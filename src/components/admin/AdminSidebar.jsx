@@ -10,6 +10,7 @@ import {
   LogOut,
   Users,
   BarChart3,
+  Building,
 } from "lucide-react";
 
 const navItems = [
@@ -24,10 +25,15 @@ const navItems = [
     icon: ClipboardCheck,
   },
   {
-  name: "Analytics",
-  href: "/admin/analytics",
-  icon: BarChart3,
-},
+    name: "Analytics",
+    href: "/admin/analytics",
+    icon: BarChart3,
+  },
+  {
+    name: "Clients",
+    href: "/admin/clients",
+    icon: Building,
+  },
   {
     name: "Leads",
     href: "/admin/leads",

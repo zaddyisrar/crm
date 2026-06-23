@@ -25,6 +25,8 @@ const emptyForm = {
   salary: "",
   workingHours: "8",
   entryTime: "07:00 PM",
+  shiftStart: "07:00 PM",
+  shiftEnd: "04:00 AM",
   status: "Active",
 };
 
@@ -144,7 +146,9 @@ export default function ManagerAgentsPage() {
       password: user.Password || "",
       salary: user.Salary || "",
       workingHours: user.WorkingHours || "8",
-      entryTime: user.EntryTime || "07:00 PM",
+      entryTime: user.EntryTime || user.ShiftStart || "07:00 PM",
+      shiftStart: user.ShiftStart || user.EntryTime || "07:00 PM",
+      shiftEnd: user.ShiftEnd || "04:00 AM",
       status: user.Status || "Active",
     });
     setError("");
@@ -189,7 +193,9 @@ export default function ManagerAgentsPage() {
         password: cleanPassword,
         salary: Number(form.salary || 0),
         workingHours: Number(form.workingHours || 8),
-        entryTime: form.entryTime || "07:00 PM",
+        entryTime: form.entryTime || form.shiftStart || "07:00 PM",
+        shiftStart: form.shiftStart || form.entryTime || "07:00 PM",
+        shiftEnd: form.shiftEnd || "04:00 AM",
         status: form.status || "Active",
       };
 
@@ -270,7 +276,9 @@ export default function ManagerAgentsPage() {
           String(user.AgentName || "").toLowerCase().includes(search) ||
           String(user.Role || "").toLowerCase().includes(search) ||
           String(user.Status || "").toLowerCase().includes(search) ||
-          String(user.EntryTime || "").toLowerCase().includes(search)
+          String(user.EntryTime || "").toLowerCase().includes(search) ||
+          String(user.ShiftStart || "").toLowerCase().includes(search) ||
+          String(user.ShiftEnd || "").toLowerCase().includes(search)
         );
       });
   }, [agents, searchTerm]);
@@ -305,7 +313,7 @@ export default function ManagerAgentsPage() {
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Create, edit, and deactivate agent IDs from Google Sheets.
+              Create, edit, deactivate agents, and manage shift timings.
             </p>
           </div>
 
@@ -385,14 +393,14 @@ export default function ManagerAgentsPage() {
             <input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search user, ID, role, status, entry time..."
+              placeholder="Search user, ID, role, status, shift time..."
               className="w-full rounded-xl border border-white/10 bg-black/25 py-2.5 pl-9 pr-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/35"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto rounded-[1.5rem] border border-white/10">
-          <table className="w-full min-w-[1350px] text-left text-sm">
+          <table className="w-full min-w-[1550px] text-left text-sm">
             <thead className="bg-white/[0.04] text-xs uppercase tracking-[0.2em] text-cyan-300">
               <tr>
                 <th className="px-5 py-4">Name</th>
@@ -405,6 +413,8 @@ export default function ManagerAgentsPage() {
                 <th className="px-5 py-4">Last Login</th>
                 <th className="px-5 py-4">Hours</th>
                 <th className="px-5 py-4">Entry Time</th>
+                <th className="px-5 py-4">Shift Start</th>
+                <th className="px-5 py-4">Shift End</th>
                 <th className="px-5 py-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -413,7 +423,7 @@ export default function ManagerAgentsPage() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan="11"
+                    colSpan="13"
                     className="px-5 py-8 text-center text-slate-500"
                   >
                     Loading users from Agents sheet...
@@ -422,7 +432,7 @@ export default function ManagerAgentsPage() {
               ) : visibleUsers.length === 0 ? (
                 <tr>
                   <td
-                    colSpan="11"
+                    colSpan="13"
                     className="px-5 py-8 text-center text-slate-500"
                   >
                     No users found.
@@ -480,7 +490,15 @@ export default function ManagerAgentsPage() {
                       </td>
 
                       <td className="px-5 py-4 text-cyan-300">
-                        {user.EntryTime || "07:00 PM"}
+                        {user.EntryTime || user.ShiftStart || "07:00 PM"}
+                      </td>
+
+                      <td className="px-5 py-4 text-blue-300">
+                        {user.ShiftStart || user.EntryTime || "07:00 PM"}
+                      </td>
+
+                      <td className="px-5 py-4 text-purple-300">
+                        {user.ShiftEnd || "-"}
                       </td>
 
                       <td className="px-5 py-4">
@@ -619,6 +637,26 @@ export default function ManagerAgentsPage() {
                     onChange={(e) => updateForm("entryTime", e.target.value)}
                     disabled={saving}
                     placeholder="07:00 PM"
+                    className="inputBox"
+                  />
+                </Field>
+
+                <Field label="Shift Start">
+                  <input
+                    value={form.shiftStart}
+                    onChange={(e) => updateForm("shiftStart", e.target.value)}
+                    disabled={saving}
+                    placeholder="07:00 PM"
+                    className="inputBox"
+                  />
+                </Field>
+
+                <Field label="Shift End">
+                  <input
+                    value={form.shiftEnd}
+                    onChange={(e) => updateForm("shiftEnd", e.target.value)}
+                    disabled={saving}
+                    placeholder="04:00 AM"
                     className="inputBox"
                   />
                 </Field>
