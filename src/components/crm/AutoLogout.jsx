@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { sheetsPost } from "@/lib/sheetsApi";
 
 const AUTO_LOGOUT_ENABLED = true;
-const INACTIVITY_LIMIT = 5 * 60 * 1000;
+const INACTIVITY_LIMIT = 15 * 60 * 1000;
 const WARNING_BEFORE_LOGOUT = 30 * 1000;
 const SHIFT_CHECK_INTERVAL = 30 * 1000;
 
@@ -48,13 +48,38 @@ function getCurrentMinutes() {
   return now.getHours() * 60 + now.getMinutes();
 }
 
-function hasShiftEnded(shiftEnd) {
-  const shiftEndMinutes = parseTimeToMinutes(shiftEnd);
-  if (shiftEndMinutes === null) return false;
+function isWithinShiftWindow(shiftStart, shiftEnd) {
+  const start = parseTimeToMinutes(shiftStart);
+  const end = parseTimeToMinutes(shiftEnd);
 
-  const nowMinutes = getCurrentMinutes();
+  if (start === null || end === null) return false;
 
-  return nowMinutes >= shiftEndMinutes;
+  const now = getCurrentMinutes();
+
+  if (start < end) {
+    return now >= start && now <= end;
+  }
+
+  return now >= start || now <= end;
+}
+
+function hasShiftEnded(shiftStart, shiftEnd) {
+  const start = parseTimeToMinutes(shiftStart);
+  const end = parseTimeToMinutes(shiftEnd);
+
+  if (start === null || end === null) return false;
+
+  const now = getCurrentMinutes();
+
+  if (!isWithinShiftWindow(shiftStart, shiftEnd)) {
+    return false;
+  }
+
+  if (start < end) {
+    return now >= end;
+  }
+
+  return now <= end;
 }
 
 function getTimeNow() {
@@ -83,7 +108,6 @@ async function requestNotificationPermission() {
 
 function sendBrowserNotification(title, body) {
   if (!canUseNotification()) return;
-
   if (Notification.permission !== "granted") return;
 
   try {
@@ -125,7 +149,10 @@ export default function AutoLogout() {
     let inactivityTimer;
     let warningTimer;
     let shiftTimer;
+
+    let shiftStartTime = "";
     let shiftEndTime = "";
+
     let shiftCheckoutStarted = false;
     let autoLogoutStarted = false;
     let warningShown = false;
@@ -146,6 +173,8 @@ export default function AutoLogout() {
             String(userId || "").toUpperCase()
         );
 
+        shiftStartTime =
+          currentAgent?.ShiftStart || currentAgent?.EntryTime || "07:00 PM";
         shiftEndTime = currentAgent?.ShiftEnd || "";
       } catch (error) {
         console.error("Shift time load failed:", error);
@@ -187,8 +216,8 @@ export default function AutoLogout() {
       const status = getCurrentStatus();
 
       if (status === "Checked Out") return;
-      if (!shiftEndTime) return;
-      if (!hasShiftEnded(shiftEndTime)) return;
+      if (!shiftStartTime || !shiftEndTime) return;
+      if (!hasShiftEnded(shiftStartTime, shiftEndTime)) return;
 
       shiftCheckoutStarted = true;
 
