@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -34,16 +35,6 @@ const navItems = [
   },
 ];
 
-function getTodayKey() {
-  const date = new Date();
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
 function getTimeNow() {
   return new Date().toLocaleTimeString([], {
     hour: "2-digit",
@@ -51,26 +42,45 @@ function getTimeNow() {
   });
 }
 
+function setLocalStatus(userId, status) {
+  localStorage.setItem(`crmCurrentStatus:${userId}`, status);
+  window.dispatchEvent(new Event("crm-status-change"));
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
 
-  function updateAgentStatus(status) {
+  const [statusSaving, setStatusSaving] = useState("");
+
+  async function updateAgentStatus(nextStatus) {
     const userId = localStorage.getItem("crmUserId");
     const role = localStorage.getItem("crmRole");
 
     if (!userId || role !== "agent") return;
 
-    localStorage.setItem(`crmCurrentStatus:${userId}`, status);
-    window.dispatchEvent(new Event("crm-status-change"));
+    const previousStatus =
+      localStorage.getItem(`crmCurrentStatus:${userId}`) || "Active";
 
-    sheetsPost({
-      action: "updateStatus",
-      agentId: userId,
-      status,
-    }).catch((error) => {
+    // Instant UI update
+    setLocalStatus(userId, nextStatus);
+    setStatusSaving(nextStatus);
+
+    try {
+      await sheetsPost({
+        action: "updateStatus",
+        agentId: userId,
+        status: nextStatus,
+      });
+    } catch (error) {
       console.error("Google Sheets status update failed:", error);
-    });
+
+      // Rollback if backend fails
+      setLocalStatus(userId, previousStatus);
+      alert("Status update failed. Please try again.");
+    } finally {
+      setStatusSaving("");
+    }
   }
 
   async function handleLogout() {
@@ -78,13 +88,9 @@ export default function Sidebar() {
     const role = localStorage.getItem("crmRole");
 
     if (userId && role === "agent") {
-      const today = getTodayKey();
       const checkOutTime = getTimeNow();
 
-      localStorage.setItem(`crmCheckOutTime:${userId}`, checkOutTime);
-      localStorage.setItem(`crmCheckedOutDate:${userId}`, today);
-      localStorage.setItem(`crmCurrentStatus:${userId}`, "Checked Out");
-      window.dispatchEvent(new Event("crm-status-change"));
+      setLocalStatus(userId, "Checked Out");
 
       try {
         await sheetsPost({
@@ -143,34 +149,38 @@ export default function Sidebar() {
       <div className="space-y-2 border-t border-cyan-400/10 pt-3">
         <button
           onClick={() => updateAgentStatus("Break")}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-yellow-400/20 bg-yellow-400/10 px-3 py-2.5 text-xs font-medium text-yellow-200 transition hover:bg-yellow-400/15"
+          disabled={Boolean(statusSaving)}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-yellow-400/20 bg-yellow-400/10 px-3 py-2.5 text-xs font-medium text-yellow-200 transition hover:bg-yellow-400/15 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Coffee size={15} />
-          Break
+          {statusSaving === "Break" ? "Updating..." : "Break"}
         </button>
 
         <button
           onClick={() => updateAgentStatus("Washroom")}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-purple-400/20 bg-purple-400/10 px-3 py-2.5 text-xs font-medium text-purple-200 transition hover:bg-purple-400/15"
+          disabled={Boolean(statusSaving)}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-purple-400/20 bg-purple-400/10 px-3 py-2.5 text-xs font-medium text-purple-200 transition hover:bg-purple-400/15 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Bath size={15} />
-          Washroom
+          {statusSaving === "Washroom" ? "Updating..." : "Washroom"}
         </button>
 
         <button
           onClick={() => updateAgentStatus("In Meeting")}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-400/20 bg-blue-400/10 px-3 py-2.5 text-xs font-medium text-blue-200 transition hover:bg-blue-400/15"
+          disabled={Boolean(statusSaving)}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-400/20 bg-blue-400/10 px-3 py-2.5 text-xs font-medium text-blue-200 transition hover:bg-blue-400/15 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Video size={15} />
-          In Meeting
+          {statusSaving === "In Meeting" ? "Updating..." : "In Meeting"}
         </button>
 
         <button
           onClick={() => updateAgentStatus("Active")}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2.5 text-xs font-medium text-emerald-200 transition hover:bg-emerald-400/15"
+          disabled={Boolean(statusSaving)}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2.5 text-xs font-medium text-emerald-200 transition hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <BriefcaseBusiness size={15} />
-          Back to Work
+          {statusSaving === "Active" ? "Updating..." : "Back to Work"}
         </button>
 
         <button

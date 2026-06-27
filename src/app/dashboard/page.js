@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Plus,
   Users,
-  Clock3,
   Building2,
   X,
   Search,
@@ -21,6 +20,9 @@ import {
 
 import PageShell from "@/components/crm/PageShell";
 import { sheetsPost } from "@/lib/sheetsApi";
+
+const REFRESH_INTERVAL = 30 * 1000;
+const LIVE_TICK_INTERVAL = 30 * 1000;
 
 function formatAgentName(value) {
   if (!value) return "Agent";
@@ -88,6 +90,25 @@ function normalizeTime(value) {
   return raw;
 }
 
+function parseTimeToMinutes(value) {
+  const time = normalizeTime(value);
+
+  if (!time || time === "-") return null;
+
+  const match = time.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+
+  if (!match) return null;
+
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const meridian = match[3]?.toUpperCase();
+
+  if (meridian === "PM" && hour !== 12) hour += 12;
+  if (meridian === "AM" && hour === 12) hour = 0;
+
+  return hour * 60 + minute;
+}
+
 function parseDateTime(dateValue, timeValue) {
   if (!dateValue || !timeValue || timeValue === "-") return null;
 
@@ -98,6 +119,27 @@ function parseDateTime(dateValue, timeValue) {
   if (!Number.isNaN(parsed.getTime())) return parsed;
 
   return null;
+}
+
+function resolveLoginDateTime(attendance, agentShift) {
+  if (!attendance) return null;
+
+  const loginDateTime = parseDateTime(attendance.Date, attendance.LoginTime);
+
+  if (!loginDateTime) return null;
+
+  const shiftStart = parseTimeToMinutes(agentShift?.shiftStart);
+  const shiftEnd = parseTimeToMinutes(agentShift?.shiftEnd);
+  const loginMinutes = parseTimeToMinutes(attendance.LoginTime);
+
+  const isNightShift =
+    shiftStart !== null && shiftEnd !== null && shiftEnd <= shiftStart;
+
+  if (isNightShift && loginMinutes !== null && loginMinutes <= shiftEnd) {
+    loginDateTime.setDate(loginDateTime.getDate() + 1);
+  }
+
+  return loginDateTime;
 }
 
 function formatMinutes(value) {
@@ -113,7 +155,7 @@ function formatMinutes(value) {
   return `${hrs}h ${mins}m`;
 }
 
-function getLiveScreenMinutes(attendance) {
+function getLiveScreenMinutes(attendance, agentShift) {
   if (!attendance) return 0;
 
   const savedScreen = Number(attendance.TotalScreenMinutes || 0);
@@ -122,7 +164,7 @@ function getLiveScreenMinutes(attendance) {
 
   if (status === "Checked Out") return savedScreen;
 
-  const loginDateTime = parseDateTime(attendance.Date, attendance.LoginTime);
+  const loginDateTime = resolveLoginDateTime(attendance, agentShift);
 
   if (!loginDateTime) return savedScreen;
 
@@ -165,6 +207,12 @@ export default function DashboardPage() {
   const [agentName, setAgentName] = useState("Agent");
   const [currentStatus, setCurrentStatus] = useState("Active");
 
+  const [agentShift, setAgentShift] = useState({
+    entryTime: "",
+    shiftStart: "",
+    shiftEnd: "",
+  });
+
   const [attendance, setAttendance] = useState(null);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
 
@@ -179,6 +227,8 @@ export default function DashboardPage() {
   const [leadError, setLeadError] = useState("");
   const [savingLead, setSavingLead] = useState(false);
 
+  const [, setLiveTick] = useState(0);
+
   const [form, setForm] = useState({
     name: "",
     company: "",
@@ -187,6 +237,34 @@ export default function DashboardPage() {
     address: "",
     note: "",
   });
+
+  async function loadAgentProfile(userId = agentId) {
+    if (!userId) return;
+
+    try {
+      const response = await sheetsPost({
+        action: "getAgents",
+      });
+
+      const agents = response?.data || [];
+
+      const currentAgent = agents.find(
+        (agent) =>
+          String(agent.AgentID || "").toUpperCase() ===
+          String(userId || "").toUpperCase()
+      );
+
+      if (!currentAgent) return;
+
+      setAgentShift({
+        entryTime: currentAgent.EntryTime || "",
+        shiftStart: currentAgent.ShiftStart || currentAgent.EntryTime || "",
+        shiftEnd: currentAgent.ShiftEnd || "",
+      });
+    } catch (error) {
+      console.error("Agent profile load failed:", error);
+    }
+  }
 
   async function loadClients() {
     try {
@@ -272,12 +350,24 @@ export default function DashboardPage() {
 
       if (latestRow?.Status) {
         setCurrentStatus(latestRow.Status);
+        localStorage.setItem(`crmCurrentStatus:${userId}`, latestRow.Status);
       }
     } catch (error) {
       console.error("Agent attendance read failed:", error);
     } finally {
       setAttendanceLoading(false);
     }
+  }
+
+  async function refreshDashboardData(userId = agentId) {
+    if (!userId) return;
+
+    await Promise.all([
+      loadAgentProfile(userId),
+      loadClients(),
+      loadAgentLeads(userId),
+      loadAgentAttendance(userId),
+    ]);
   }
 
   useEffect(() => {
@@ -299,22 +389,32 @@ export default function DashboardPage() {
         localStorage.getItem(`crmCurrentStatus:${userId}`) || "Active";
 
       setCurrentStatus(nextStatus);
+
+      setAttendance((current) => {
+        if (!current) return current;
+
+        return {
+          ...current,
+          Status: nextStatus,
+        };
+      });
     }
 
     window.addEventListener("crm-status-change", syncStatusFromStorage);
 
-    loadClients();
-    loadAgentLeads(userId);
-    loadAgentAttendance(userId);
+    refreshDashboardData(userId);
 
-    const interval = setInterval(() => {
-      loadClients();
-      loadAgentLeads(userId);
-      loadAgentAttendance(userId);
-    }, 10000);
+    const refreshInterval = setInterval(() => {
+      refreshDashboardData(userId);
+    }, REFRESH_INTERVAL);
+
+    const liveInterval = setInterval(() => {
+      setLiveTick((value) => value + 1);
+    }, LIVE_TICK_INTERVAL);
 
     return () => {
-      clearInterval(interval);
+      clearInterval(refreshInterval);
+      clearInterval(liveInterval);
       window.removeEventListener("crm-status-change", syncStatusFromStorage);
     };
   }, []);
@@ -340,10 +440,18 @@ export default function DashboardPage() {
 
   const checkInTime = normalizeTime(attendance?.LoginTime);
   const inactiveMinutes = Number(attendance?.TotalInactiveMinutes || 0);
-  const screenMinutes = getLiveScreenMinutes(attendance);
+  const screenMinutes = getLiveScreenMinutes(attendance, agentShift);
   const lastAutoLogout = normalizeTime(attendance?.LastAutoLogout);
   const lastResumeTime = normalizeTime(attendance?.LastResumeTime);
   const attendanceStatus = attendance?.Status || currentStatus || "Active";
+
+  const shiftNote = useMemo(() => {
+    if (!agentShift?.shiftStart || !agentShift?.shiftEnd) {
+      return "Shift timing not loaded";
+    }
+
+    return `${agentShift.shiftStart} → ${agentShift.shiftEnd}`;
+  }, [agentShift]);
 
   function handleChange(e) {
     const { name, value } = e.target;
@@ -418,11 +526,7 @@ export default function DashboardPage() {
           <StatusBadge status={attendanceStatus} />
 
           <button
-            onClick={() => {
-              loadClients();
-              loadAgentLeads(agentId);
-              loadAgentAttendance(agentId);
-            }}
+            onClick={() => refreshDashboardData(agentId)}
             disabled={leadsLoading || attendanceLoading || clientsLoading}
             className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] font-medium text-slate-300 hover:border-cyan-300/25 hover:text-cyan-100 disabled:opacity-60"
           >
@@ -506,7 +610,7 @@ export default function DashboardPage() {
           <DashboardCard
             label="Login Time"
             value={checkInTime}
-            note="Google Sheets"
+            note={shiftNote}
             icon={LogIn}
             tone="text-cyan-300"
           />

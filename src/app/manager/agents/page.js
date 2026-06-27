@@ -23,10 +23,10 @@ const emptyForm = {
   agentName: "",
   password: "",
   salary: "",
-  workingHours: "8",
-  entryTime: "07:00 PM",
-  shiftStart: "07:00 PM",
-  shiftEnd: "04:00 AM",
+  workingHours: "9",
+  entryTime: "18:45",
+  shiftStart: "19:00",
+  shiftEnd: "04:00",
   status: "Active",
 };
 
@@ -66,22 +66,107 @@ function normalizeDate(value) {
   return raw;
 }
 
-function normalizeTime(value) {
-  if (!value) return "-";
+function timeToMinutes(value) {
+  if (!value) return null;
 
   const raw = String(value).trim();
-  if (!raw || raw === "-") return "-";
 
-  const date = new Date(value);
-
-  if (!Number.isNaN(date.getTime())) {
-    return date.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  let match24 = raw.match(/^(\d{1,2}):(\d{2})$/);
+  if (match24) {
+    return Number(match24[1]) * 60 + Number(match24[2]);
   }
 
-  return raw;
+  let match12 = raw.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (match12) {
+    let hour = Number(match12[1]);
+    const minute = Number(match12[2]);
+    const meridian = match12[3].toUpperCase();
+
+    if (meridian === "PM" && hour !== 12) hour += 12;
+    if (meridian === "AM" && hour === 12) hour = 0;
+
+    return hour * 60 + minute;
+  }
+
+  const date = new Date(raw);
+  if (!Number.isNaN(date.getTime())) {
+    return date.getHours() * 60 + date.getMinutes();
+  }
+
+  return null;
+}
+
+function toTimeInput(value, fallback = "19:00") {
+  const minutes = timeToMinutes(value);
+
+  if (minutes === null) return fallback;
+
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function toAmPm(value, fallback = "07:00 PM") {
+  const minutes = timeToMinutes(value);
+
+  if (minutes === null) return fallback;
+
+  let hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  const meridian = hour >= 12 ? "PM" : "AM";
+
+  hour = hour % 12;
+  if (hour === 0) hour = 12;
+
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(
+    2,
+    "0"
+  )} ${meridian}`;
+}
+
+function calculateWorkingHours(shiftStart, shiftEnd) {
+  const start = timeToMinutes(shiftStart);
+  const end = timeToMinutes(shiftEnd);
+
+  if (start === null || end === null) return "0";
+
+  let diff = end - start;
+
+  if (diff <= 0) {
+    diff += 24 * 60;
+  }
+
+  return (diff / 60).toFixed(diff % 60 === 0 ? 0 : 2);
+}
+
+function isNightShift(shiftStart, shiftEnd) {
+  const start = timeToMinutes(shiftStart);
+  const end = timeToMinutes(shiftEnd);
+
+  if (start === null || end === null) return false;
+
+  return end <= start;
+}
+
+function validateShiftTimes(entryTime, shiftStart, shiftEnd) {
+  const entry = timeToMinutes(entryTime);
+  const start = timeToMinutes(shiftStart);
+  const end = timeToMinutes(shiftEnd);
+
+  if (entry === null) throw new Error("Entry Time is required");
+  if (start === null) throw new Error("Shift Start is required");
+  if (end === null) throw new Error("Shift End is required");
+
+  if (start === end) {
+    throw new Error("Shift Start and Shift End cannot be the same.");
+  }
+
+  if (entry > start) {
+    throw new Error("Entry Time cannot be after Shift Start.");
+  }
+
+  return true;
 }
 
 export default function ManagerAgentsPage() {
@@ -97,6 +182,16 @@ export default function ManagerAgentsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [mode, setMode] = useState("create");
   const [form, setForm] = useState(emptyForm);
+
+  const calculatedHours = useMemo(() => {
+    return calculateWorkingHours(form.shiftStart, form.shiftEnd);
+  }, [form.shiftStart, form.shiftEnd]);
+
+  const shiftType = useMemo(() => {
+    return isNightShift(form.shiftStart, form.shiftEnd)
+      ? "Night Shift"
+      : "Day Shift";
+  }, [form.shiftStart, form.shiftEnd]);
 
   async function loadAgents(showLoader = false) {
     try {
@@ -145,10 +240,10 @@ export default function ManagerAgentsPage() {
       agentName: user.AgentName || "",
       password: user.Password || "",
       salary: user.Salary || "",
-      workingHours: user.WorkingHours || "8",
-      entryTime: user.EntryTime || user.ShiftStart || "07:00 PM",
-      shiftStart: user.ShiftStart || user.EntryTime || "07:00 PM",
-      shiftEnd: user.ShiftEnd || "04:00 AM",
+      workingHours: user.WorkingHours || "9",
+      entryTime: toTimeInput(user.EntryTime || user.ShiftStart, "18:45"),
+      shiftStart: toTimeInput(user.ShiftStart || user.EntryTime, "19:00"),
+      shiftEnd: toTimeInput(user.ShiftEnd, "04:00"),
       status: user.Status || "Active",
     });
     setError("");
@@ -164,10 +259,21 @@ export default function ManagerAgentsPage() {
   }
 
   function updateForm(key, value) {
-    setForm((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+    setForm((prev) => {
+      const next = {
+        ...prev,
+        [key]: value,
+      };
+
+      if (key === "shiftStart" || key === "shiftEnd") {
+        next.workingHours = calculateWorkingHours(
+          key === "shiftStart" ? value : next.shiftStart,
+          key === "shiftEnd" ? value : next.shiftEnd
+        );
+      }
+
+      return next;
+    });
   }
 
   async function handleSaveAgent(e) {
@@ -186,16 +292,23 @@ export default function ManagerAgentsPage() {
       if (!cleanAgentName) throw new Error("Agent name is required");
       if (!cleanPassword) throw new Error("Password is required");
 
+      validateShiftTimes(form.entryTime, form.shiftStart, form.shiftEnd);
+
+      const finalWorkingHours = calculateWorkingHours(
+        form.shiftStart,
+        form.shiftEnd
+      );
+
       const payload = {
         action: mode === "create" ? "addAgent" : "updateAgent",
         agentId: cleanAgentId,
         agentName: cleanAgentName,
         password: cleanPassword,
         salary: Number(form.salary || 0),
-        workingHours: Number(form.workingHours || 8),
-        entryTime: form.entryTime || form.shiftStart || "07:00 PM",
-        shiftStart: form.shiftStart || form.entryTime || "07:00 PM",
-        shiftEnd: form.shiftEnd || "04:00 AM",
+        workingHours: Number(finalWorkingHours || 0),
+        entryTime: toAmPm(form.entryTime, "06:45 PM"),
+        shiftStart: toAmPm(form.shiftStart, "07:00 PM"),
+        shiftEnd: toAmPm(form.shiftEnd, "04:00 AM"),
         status: form.status || "Active",
       };
 
@@ -482,7 +595,7 @@ export default function ManagerAgentsPage() {
                       </td>
 
                       <td className="px-5 py-4 text-slate-400">
-                        {normalizeTime(user.LastLogin)}
+                        {user.LastLogin || "-"}
                       </td>
 
                       <td className="px-5 py-4 text-slate-400">
@@ -490,11 +603,11 @@ export default function ManagerAgentsPage() {
                       </td>
 
                       <td className="px-5 py-4 text-cyan-300">
-                        {user.EntryTime || user.ShiftStart || "07:00 PM"}
+                        {user.EntryTime || "-"}
                       </td>
 
                       <td className="px-5 py-4 text-blue-300">
-                        {user.ShiftStart || user.EntryTime || "07:00 PM"}
+                        {user.ShiftStart || "-"}
                       </td>
 
                       <td className="px-5 py-4 text-purple-300">
@@ -560,7 +673,8 @@ export default function ManagerAgentsPage() {
                 </h3>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  This data writes directly to the Agents sheet.
+                  Entry Time controls login window. Shift End controls auto
+                  checkout.
                 </p>
               </div>
 
@@ -618,46 +732,41 @@ export default function ManagerAgentsPage() {
                   />
                 </Field>
 
-                <Field label="Working Hours">
-                  <input
-                    type="number"
-                    value={form.workingHours}
-                    onChange={(e) =>
-                      updateForm("workingHours", e.target.value)
-                    }
-                    disabled={saving}
-                    placeholder="8"
-                    className="inputBox"
-                  />
-                </Field>
-
                 <Field label="Entry Time">
                   <input
+                    type="time"
                     value={form.entryTime}
                     onChange={(e) => updateForm("entryTime", e.target.value)}
                     disabled={saving}
-                    placeholder="07:00 PM"
                     className="inputBox"
                   />
                 </Field>
 
                 <Field label="Shift Start">
                   <input
+                    type="time"
                     value={form.shiftStart}
                     onChange={(e) => updateForm("shiftStart", e.target.value)}
                     disabled={saving}
-                    placeholder="07:00 PM"
                     className="inputBox"
                   />
                 </Field>
 
                 <Field label="Shift End">
                   <input
+                    type="time"
                     value={form.shiftEnd}
                     onChange={(e) => updateForm("shiftEnd", e.target.value)}
                     disabled={saving}
-                    placeholder="04:00 AM"
                     className="inputBox"
+                  />
+                </Field>
+
+                <Field label="Working Hours">
+                  <input
+                    value={calculatedHours}
+                    readOnly
+                    className="inputBox cursor-not-allowed opacity-80"
                   />
                 </Field>
 
@@ -668,10 +777,35 @@ export default function ManagerAgentsPage() {
                     disabled={saving}
                     className="inputBox"
                   >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
+                    <option value="Active">🟢 Active</option>
+                    <option value="Inactive">🔴 Inactive</option>
                   </select>
                 </Field>
+              </div>
+
+              <div className="rounded-2xl border border-cyan-300/15 bg-cyan-300/5 p-4 text-sm">
+                <p className="font-black text-cyan-200">Shift Preview</p>
+
+                <div className="mt-3 grid gap-3 text-slate-300 sm:grid-cols-2">
+                  <PreviewItem
+                    label="Entry Time"
+                    value={toAmPm(form.entryTime, "06:45 PM")}
+                  />
+                  <PreviewItem
+                    label="Shift Start"
+                    value={toAmPm(form.shiftStart, "07:00 PM")}
+                  />
+                  <PreviewItem
+                    label="Auto Checkout"
+                    value={toAmPm(form.shiftEnd, "04:00 AM")}
+                  />
+                  <PreviewItem label="Duration" value={`${calculatedHours} Hours`} />
+                  <PreviewItem label="Shift Type" value={shiftType} />
+                  <PreviewItem
+                    label="Next Login"
+                    value={`${toAmPm(form.entryTime, "06:45 PM")} Next Cycle`}
+                  />
+                </div>
               </div>
 
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:justify-end">
@@ -748,5 +882,16 @@ function Field({ label, children }) {
       </p>
       {children}
     </label>
+  );
+}
+
+function PreviewItem({ label, value }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+      <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 font-bold text-white">{value}</p>
+    </div>
   );
 }

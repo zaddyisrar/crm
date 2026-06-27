@@ -14,23 +14,6 @@ import {
   Crosshair,
 } from "lucide-react";
 
-function getTodayKey() {
-  const date = new Date();
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function getTimeNow() {
-  return new Date().toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 export default function LoginPage() {
   const router = useRouter();
 
@@ -63,7 +46,6 @@ export default function LoginPage() {
 
     const cleanUserId = userId.trim().toUpperCase();
     const cleanPassword = password.trim();
-    const today = getTodayKey();
 
     try {
       const loginResponse = await sheetsPost({
@@ -86,14 +68,10 @@ export default function LoginPage() {
       const finalUserName = foundUser.agentName || "User";
 
       if (finalRole === "agent") {
-        const loginTime = getTimeNow();
-
         const attendanceResponse = await sheetsPost({
           action: "attendanceLogin",
           agentId: finalUserId,
           agentName: finalUserName,
-          date: today,
-          loginTime,
           status: "Active",
         });
 

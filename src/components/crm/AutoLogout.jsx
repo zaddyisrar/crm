@@ -43,43 +43,56 @@ function parseTimeToMinutes(value) {
   return hour * 60 + minute;
 }
 
-function getCurrentMinutes() {
+function buildTodayDateAtMinutes(minutes) {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setMinutes(minutes);
+  return date;
+}
+
+function getCurrentShiftWindow(shiftStart, shiftEnd) {
+  const startMinutes = parseTimeToMinutes(shiftStart);
+  const endMinutes = parseTimeToMinutes(shiftEnd);
+
+  if (startMinutes === null || endMinutes === null) return null;
+
   const now = new Date();
-  return now.getHours() * 60 + now.getMinutes();
+
+  let start = buildTodayDateAtMinutes(startMinutes);
+  let end = buildTodayDateAtMinutes(endMinutes);
+
+  if (startMinutes < endMinutes) {
+    return { start, end };
+  }
+
+  // Overnight shift, example: 08:30 PM → 05:30 AM
+  if (now.getTime() <= end.getTime()) {
+    start.setDate(start.getDate() - 1);
+  } else {
+    end.setDate(end.getDate() + 1);
+  }
+
+  return { start, end };
 }
 
 function isWithinShiftWindow(shiftStart, shiftEnd) {
-  const start = parseTimeToMinutes(shiftStart);
-  const end = parseTimeToMinutes(shiftEnd);
+  const window = getCurrentShiftWindow(shiftStart, shiftEnd);
+  if (!window) return false;
 
-  if (start === null || end === null) return false;
-
-  const now = getCurrentMinutes();
-
-  if (start < end) {
-    return now >= start && now <= end;
-  }
-
-  return now >= start || now <= end;
+  const now = new Date();
+  return now >= window.start && now <= window.end;
 }
 
 function hasShiftEnded(shiftStart, shiftEnd) {
-  const start = parseTimeToMinutes(shiftStart);
-  const end = parseTimeToMinutes(shiftEnd);
+  const window = getCurrentShiftWindow(shiftStart, shiftEnd);
+  if (!window) return false;
 
-  if (start === null || end === null) return false;
+  const now = new Date();
 
-  const now = getCurrentMinutes();
-
-  if (!isWithinShiftWindow(shiftStart, shiftEnd)) {
-    return false;
-  }
-
-  if (start < end) {
-    return now >= end;
-  }
-
-  return now <= end;
+  // Important:
+  // This becomes true only when actual shiftEnd datetime has passed.
+  // It will NOT fire at 12 AM for overnight shifts.
+  return now >= window.end;
 }
 
 function getTimeNow() {
@@ -294,6 +307,8 @@ export default function AutoLogout() {
     }
 
     function resetInactivityTimer() {
+      if (autoLogoutStarted || shiftCheckoutStarted) return;
+
       warningShown = false;
 
       clearTimeout(inactivityTimer);
@@ -307,7 +322,14 @@ export default function AutoLogout() {
       inactivityTimer = setTimeout(autoLogoutByInactivity, INACTIVITY_LIMIT);
     }
 
-    const events = ["mousemove", "keydown", "click", "scroll", "touchstart"];
+    const events = [
+      "mousemove",
+      "keydown",
+      "click",
+      "scroll",
+      "touchstart",
+      "focus",
+    ];
 
     events.forEach((event) => {
       window.addEventListener(event, resetInactivityTimer);
