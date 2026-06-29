@@ -138,6 +138,21 @@ function sendWindowAlert(message) {
   }
 }
 
+function setExtensionSession(active, agentId = "") {
+  try {
+    window.postMessage(
+      {
+        type: "CRM_SET_EXTENSION_SESSION",
+        active: Boolean(active),
+        agentId: active ? agentId : "",
+      },
+      "*"
+    );
+  } catch (error) {
+    // Safe to ignore if extension/content script is not available.
+  }
+}
+
 function getExtensionActivity() {
   return new Promise((resolve) => {
     try {
@@ -149,6 +164,8 @@ function getExtensionActivity() {
           lastActivity: 0,
           heartbeat: 0,
           source: "",
+          sessionActive: false,
+          sessionAgentId: "",
         });
       }, 700);
 
@@ -166,6 +183,8 @@ function getExtensionActivity() {
           lastActivity: Number(payload.lastActivity || 0),
           heartbeat: Number(payload.heartbeat || 0),
           source: payload.source || "",
+          sessionActive: Boolean(payload.sessionActive),
+          sessionAgentId: payload.sessionAgentId || "",
         });
       }
 
@@ -183,6 +202,8 @@ function getExtensionActivity() {
         lastActivity: 0,
         heartbeat: 0,
         source: "",
+        sessionActive: false,
+        sessionAgentId: "",
       });
     }
   });
@@ -197,6 +218,8 @@ export default function AutoLogout() {
     const userName = localStorage.getItem("crmUserName");
 
     if (role !== "agent" || !userId) return;
+
+    setExtensionSession(true, userId);
 
     let warningTimer;
     let fallbackInactivityTimer;
@@ -244,6 +267,13 @@ export default function AutoLogout() {
       localStorage.removeItem("crmRole");
       localStorage.removeItem("crmUserId");
       localStorage.removeItem("crmUserName");
+    }
+
+    function stopAllTimers() {
+      clearTimeout(warningTimer);
+      clearTimeout(fallbackInactivityTimer);
+      clearInterval(activityCheckTimer);
+      clearInterval(shiftTimer);
     }
 
     function showInactivityWarning() {
@@ -301,11 +331,8 @@ export default function AutoLogout() {
         console.error("Shift auto checkout failed:", error);
       }
 
-      clearTimeout(warningTimer);
-      clearTimeout(fallbackInactivityTimer);
-      clearInterval(activityCheckTimer);
-      clearInterval(shiftTimer);
-
+      stopAllTimers();
+      setExtensionSession(false);
       clearLoginStorage();
 
       setTimeout(() => {
@@ -342,6 +369,8 @@ export default function AutoLogout() {
         console.error("Auto logout failed:", error);
       }
 
+      stopAllTimers();
+      setExtensionSession(false);
       clearLoginStorage();
 
       setTimeout(() => {
@@ -377,8 +406,11 @@ export default function AutoLogout() {
       if (status !== "Active") {
         warningShown = false;
         clearTimeout(warningTimer);
+        setExtensionSession(false);
         return;
       }
+
+      setExtensionSession(true, userId);
 
       const extension = await getExtensionActivity();
 
@@ -387,13 +419,16 @@ export default function AutoLogout() {
         : fallbackLastActivity;
 
       if (extension.connected) {
-      clearTimeout(fallbackInactivityTimer);
+        clearTimeout(fallbackInactivityTimer);
 
-      if (extension.lastActivity && Date.now() - extension.lastActivity < INACTIVITY_LIMIT) {
-      clearTimeout(warningTimer);
-      warningShown = false;
+        if (
+          extension.lastActivity &&
+          Date.now() - extension.lastActivity < INACTIVITY_LIMIT
+        ) {
+          clearTimeout(warningTimer);
+          warningShown = false;
+        }
       }
-       }
 
       if (!lastActivity) {
         resetFallbackTimer();

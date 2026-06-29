@@ -47,6 +47,21 @@ function setLocalStatus(userId, status) {
   window.dispatchEvent(new Event("crm-status-change"));
 }
 
+function setExtensionSession(active, agentId = "") {
+  try {
+    window.postMessage(
+      {
+        type: "CRM_SET_EXTENSION_SESSION",
+        active: Boolean(active),
+        agentId: active ? agentId : "",
+      },
+      "*"
+    );
+  } catch (error) {
+    // Safe to ignore if extension/content script is not available.
+  }
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -62,7 +77,6 @@ export default function Sidebar() {
     const previousStatus =
       localStorage.getItem(`crmCurrentStatus:${userId}`) || "Active";
 
-    // Instant UI update
     setLocalStatus(userId, nextStatus);
     setStatusSaving(nextStatus);
 
@@ -75,7 +89,6 @@ export default function Sidebar() {
     } catch (error) {
       console.error("Google Sheets status update failed:", error);
 
-      // Rollback if backend fails
       setLocalStatus(userId, previousStatus);
       alert("Status update failed. Please try again.");
     } finally {
@@ -91,6 +104,7 @@ export default function Sidebar() {
       const checkOutTime = getTimeNow();
 
       setLocalStatus(userId, "Checked Out");
+      setExtensionSession(false);
 
       try {
         await sheetsPost({
@@ -101,6 +115,8 @@ export default function Sidebar() {
       } catch (error) {
         console.error("Google Sheets check-out failed:", error);
       }
+    } else {
+      setExtensionSession(false);
     }
 
     localStorage.removeItem("crmRole");

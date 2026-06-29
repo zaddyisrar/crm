@@ -53,6 +53,21 @@ function sendActivityResponse() {
   }
 }
 
+function setSessionFromPage(active, agentId = "") {
+  try {
+    chrome.runtime.sendMessage(
+      {
+        type: "CRM_SET_SESSION",
+        active: Boolean(active),
+        agentId,
+      },
+      () => {}
+    );
+  } catch (error) {
+    // Safe to ignore if extension context refreshed.
+  }
+}
+
 function getActivity(callback) {
   try {
     chrome.runtime.sendMessage({ type: "CRM_GET_ACTIVITY" }, (response) => {
@@ -130,6 +145,11 @@ function startIdlePopupWatcher() {
 
   popupInterval = setInterval(() => {
     getActivity((activity) => {
+      if (!activity?.sessionActive) {
+        hideIdlePopup();
+        return;
+      }
+
       const lastActivity = Number(activity?.lastActivity || 0);
 
       if (!lastActivity) {
@@ -161,6 +181,10 @@ window.addEventListener("message", (event) => {
 
   if (event.data?.type === "CRM_GET_EXTENSION_ACTIVITY") {
     sendActivityResponse();
+  }
+
+  if (event.data?.type === "CRM_SET_EXTENSION_SESSION") {
+    setSessionFromPage(event.data.active, event.data.agentId || "");
   }
 });
 
