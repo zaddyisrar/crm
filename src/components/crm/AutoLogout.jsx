@@ -4,9 +4,15 @@ import { useEffect } from "react";
 import { sheetsPost } from "@/lib/sheetsApi";
 
 const AUTO_LOGOUT_ENABLED = true;
+
 const INACTIVITY_LIMIT = 15 * 60 * 1000;
 const WARNING_BEFORE_LOGOUT = 30 * 1000;
+
+const ACTIVITY_CHECK_INTERVAL = 15 * 1000;
 const SHIFT_CHECK_INTERVAL = 30 * 1000;
+
+const EXTENSION_ACTIVITY_KEY = "crmLastBrowserActivity";
+const EXTENSION_HEARTBEAT_KEY = "crmExtensionHeartbeat";
 
 function normalizeTime(value) {
   if (!value) return "";
@@ -65,7 +71,6 @@ function getCurrentShiftWindow(shiftStart, shiftEnd) {
     return { start, end };
   }
 
-  // Overnight shift, example: 08:30 PM → 05:30 AM
   if (now.getTime() <= end.getTime()) {
     start.setDate(start.getDate() - 1);
   } else {
@@ -75,24 +80,11 @@ function getCurrentShiftWindow(shiftStart, shiftEnd) {
   return { start, end };
 }
 
-function isWithinShiftWindow(shiftStart, shiftEnd) {
-  const window = getCurrentShiftWindow(shiftStart, shiftEnd);
-  if (!window) return false;
-
-  const now = new Date();
-  return now >= window.start && now <= window.end;
-}
-
 function hasShiftEnded(shiftStart, shiftEnd) {
   const window = getCurrentShiftWindow(shiftStart, shiftEnd);
   if (!window) return false;
 
-  const now = new Date();
-
-  // Important:
-  // This becomes true only when actual shiftEnd datetime has passed.
-  // It will NOT fire at 12 AM for overnight shifts.
-  return now >= window.end;
+  return new Date() >= window.end;
 }
 
 function getTimeNow() {
@@ -149,6 +141,48 @@ function sendWindowAlert(message) {
   }
 }
 
+function getExtensionActivity() {
+  return new Promise((resolve) => {
+    try {
+      if (
+        typeof window === "undefined" ||
+        !window.chrome ||
+        !window.chrome.storage ||
+        !window.chrome.storage.local
+      ) {
+        resolve({
+          connected: false,
+          lastActivity: 0,
+          heartbeat: 0,
+          source: "",
+        });
+        return;
+      }
+
+      window.chrome.storage.local.get(
+        [EXTENSION_ACTIVITY_KEY, EXTENSION_HEARTBEAT_KEY, "crmActivitySource"],
+        (data) => {
+          resolve({
+            connected: Boolean(
+              data?.[EXTENSION_ACTIVITY_KEY] || data?.[EXTENSION_HEARTBEAT_KEY]
+            ),
+            lastActivity: Number(data?.[EXTENSION_ACTIVITY_KEY] || 0),
+            heartbeat: Number(data?.[EXTENSION_HEARTBEAT_KEY] || 0),
+            source: data?.crmActivitySource || "",
+          });
+        }
+      );
+    } catch (error) {
+      resolve({
+        connected: false,
+        lastActivity: 0,
+        heartbeat: 0,
+        source: "",
+      });
+    }
+  });
+}
+
 export default function AutoLogout() {
   useEffect(() => {
     if (!AUTO_LOGOUT_ENABLED) return;
@@ -159,8 +193,9 @@ export default function AutoLogout() {
 
     if (role !== "agent" || !userId) return;
 
-    let inactivityTimer;
     let warningTimer;
+    let fallbackInactivityTimer;
+    let activityCheckTimer;
     let shiftTimer;
 
     let shiftStartTime = "";
@@ -169,6 +204,8 @@ export default function AutoLogout() {
     let shiftCheckoutStarted = false;
     let autoLogoutStarted = false;
     let warningShown = false;
+
+    let fallbackLastActivity = Date.now();
 
     requestNotificationPermission();
 
@@ -215,11 +252,11 @@ export default function AutoLogout() {
 
       sendBrowserNotification(
         "CRM Auto Logout Warning",
-        "You will be auto logged out in 30 seconds due to inactivity."
+        "You will be auto logged out in 30 seconds due to browser inactivity."
       );
 
       sendWindowAlert(
-        "You will be auto logged out in 30 seconds due to inactivity."
+        "You will be auto logged out in 30 seconds due to browser inactivity."
       );
     }
 
@@ -259,8 +296,9 @@ export default function AutoLogout() {
         console.error("Shift auto checkout failed:", error);
       }
 
-      clearTimeout(inactivityTimer);
       clearTimeout(warningTimer);
+      clearTimeout(fallbackInactivityTimer);
+      clearInterval(activityCheckTimer);
       clearInterval(shiftTimer);
 
       clearLoginStorage();
@@ -276,7 +314,7 @@ export default function AutoLogout() {
       const status = getCurrentStatus();
 
       if (status !== "Active") {
-        resetInactivityTimer();
+        warningShown = false;
         return;
       }
 
@@ -284,10 +322,10 @@ export default function AutoLogout() {
 
       sendBrowserNotification(
         "CRM Auto Logout",
-        "You have been logged out due to inactivity."
+        "You have been logged out due to browser inactivity."
       );
 
-      sendWindowAlert("You have been logged out due to inactivity.");
+      sendWindowAlert("You have been logged out due to browser inactivity.");
 
       try {
         await sheetsPost({
@@ -306,23 +344,68 @@ export default function AutoLogout() {
       }, 1200);
     }
 
-    function resetInactivityTimer() {
+    function resetFallbackTimer() {
       if (autoLogoutStarted || shiftCheckoutStarted) return;
 
+      fallbackLastActivity = Date.now();
       warningShown = false;
 
-      clearTimeout(inactivityTimer);
       clearTimeout(warningTimer);
+      clearTimeout(fallbackInactivityTimer);
 
       warningTimer = setTimeout(
         showInactivityWarning,
         INACTIVITY_LIMIT - WARNING_BEFORE_LOGOUT
       );
 
-      inactivityTimer = setTimeout(autoLogoutByInactivity, INACTIVITY_LIMIT);
+      fallbackInactivityTimer = setTimeout(
+        autoLogoutByInactivity,
+        INACTIVITY_LIMIT
+      );
     }
 
-    const events = [
+    async function checkBrowserActivity() {
+      if (autoLogoutStarted || shiftCheckoutStarted) return;
+
+      const status = getCurrentStatus();
+
+      if (status !== "Active") {
+        warningShown = false;
+        clearTimeout(warningTimer);
+        return;
+      }
+
+      const extension = await getExtensionActivity();
+
+      const lastActivity = extension.connected
+        ? extension.lastActivity
+        : fallbackLastActivity;
+
+      if (!lastActivity) {
+        resetFallbackTimer();
+        return;
+      }
+
+      const inactiveFor = Date.now() - lastActivity;
+      const warningAt = INACTIVITY_LIMIT - WARNING_BEFORE_LOGOUT;
+
+      if (inactiveFor < warningAt) {
+        warningShown = false;
+        clearTimeout(warningTimer);
+        return;
+      }
+
+      if (inactiveFor >= warningAt && inactiveFor < INACTIVITY_LIMIT) {
+        showInactivityWarning();
+        return;
+      }
+
+      if (inactiveFor >= INACTIVITY_LIMIT) {
+        await autoLogoutByInactivity();
+      }
+    }
+
+    const fallbackEvents = [
       "mousemove",
       "keydown",
       "click",
@@ -331,8 +414,8 @@ export default function AutoLogout() {
       "focus",
     ];
 
-    events.forEach((event) => {
-      window.addEventListener(event, resetInactivityTimer);
+    fallbackEvents.forEach((event) => {
+      window.addEventListener(event, resetFallbackTimer);
     });
 
     loadAgentShift().then(() => {
@@ -343,15 +426,22 @@ export default function AutoLogout() {
       }, SHIFT_CHECK_INTERVAL);
     });
 
-    resetInactivityTimer();
+    resetFallbackTimer();
+
+    activityCheckTimer = setInterval(() => {
+      checkBrowserActivity();
+    }, ACTIVITY_CHECK_INTERVAL);
+
+    checkBrowserActivity();
 
     return () => {
-      clearTimeout(inactivityTimer);
       clearTimeout(warningTimer);
+      clearTimeout(fallbackInactivityTimer);
+      clearInterval(activityCheckTimer);
       clearInterval(shiftTimer);
 
-      events.forEach((event) => {
-        window.removeEventListener(event, resetInactivityTimer);
+      fallbackEvents.forEach((event) => {
+        window.removeEventListener(event, resetFallbackTimer);
       });
     };
   }, []);
