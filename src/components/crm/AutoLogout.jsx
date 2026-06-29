@@ -5,7 +5,7 @@ import { sheetsPost } from "@/lib/sheetsApi";
 
 const AUTO_LOGOUT_ENABLED = true;
 
-const INACTIVITY_LIMIT = 15 * 60 * 1000;
+const INACTIVITY_LIMIT = 5 * 60 * 1000;
 const WARNING_BEFORE_LOGOUT = 30 * 1000;
 
 const ACTIVITY_CHECK_INTERVAL = 15 * 1000;
@@ -385,6 +385,15 @@ export default function AutoLogout() {
       const lastActivity = extension.connected
         ? extension.lastActivity
         : fallbackLastActivity;
+
+      if (extension.connected) {
+      clearTimeout(fallbackInactivityTimer);
+
+      if (extension.lastActivity && Date.now() - extension.lastActivity < INACTIVITY_LIMIT) {
+      clearTimeout(warningTimer);
+      warningShown = false;
+      }
+       }
 
       if (!lastActivity) {
         resetFallbackTimer();
