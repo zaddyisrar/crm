@@ -1,47 +1,70 @@
-function getExtensionActivity() {
-  return new Promise((resolve) => {
-    try {
-      const timeout = setTimeout(() => {
-        resolve({
-          connected: false,
-          lastActivity: 0,
-          heartbeat: 0,
-          source: "",
-        });
-      }, 700);
+const ACTIVITY_THROTTLE = 3000;
+let lastSent = 0;
 
-      function handleMessage(event) {
-        if (event.source !== window) return;
-        if (event.data?.type !== "CRM_EXTENSION_ACTIVITY_RESPONSE") return;
+function sendActivity(source) {
+  const now = Date.now();
 
-        clearTimeout(timeout);
-        window.removeEventListener("message", handleMessage);
+  if (now - lastSent < ACTIVITY_THROTTLE) return;
 
-        const payload = event.data.payload || {};
+  lastSent = now;
 
-        resolve({
-          connected: Boolean(payload.lastActivity || payload.heartbeat),
-          lastActivity: Number(payload.lastActivity || 0),
-          heartbeat: Number(payload.heartbeat || 0),
-          source: payload.source || "",
-        });
-      }
+  try {
+    chrome.runtime.sendMessage({
+      type: "CRM_BROWSER_ACTIVITY",
+      source,
+      timestamp: now,
+    });
+  } catch (error) {}
+}
 
-      window.addEventListener("message", handleMessage);
-
+function sendActivityResponse() {
+  try {
+    chrome.runtime.sendMessage({ type: "CRM_GET_ACTIVITY" }, (response) => {
       window.postMessage(
         {
-          type: "CRM_GET_EXTENSION_ACTIVITY",
+          type: "CRM_EXTENSION_ACTIVITY_RESPONSE",
+          payload: response || { success: false },
         },
         "*"
       );
-    } catch (error) {
-      resolve({
-        connected: false,
-        lastActivity: 0,
-        heartbeat: 0,
-        source: "",
-      });
-    }
-  });
+    });
+  } catch (error) {
+    window.postMessage(
+      {
+        type: "CRM_EXTENSION_ACTIVITY_RESPONSE",
+        payload: { success: false },
+      },
+      "*"
+    );
+  }
 }
+
+window.addEventListener("message", (event) => {
+  if (event.source !== window) return;
+
+  if (event.data?.type === "CRM_GET_EXTENSION_ACTIVITY") {
+    sendActivityResponse();
+  }
+});
+
+[
+  "mousemove",
+  "mousedown",
+  "mouseup",
+  "keydown",
+  "keyup",
+  "scroll",
+  "wheel",
+  "touchstart",
+  "focus",
+].forEach((eventName) => {
+  window.addEventListener(eventName, () => sendActivity(eventName), {
+    passive: true,
+  });
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) sendActivity("visibilitychange");
+});
+
+sendActivity("content-loaded");
