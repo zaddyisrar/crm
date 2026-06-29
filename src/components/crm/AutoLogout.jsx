@@ -11,9 +11,6 @@ const WARNING_BEFORE_LOGOUT = 30 * 1000;
 const ACTIVITY_CHECK_INTERVAL = 15 * 1000;
 const SHIFT_CHECK_INTERVAL = 30 * 1000;
 
-const EXTENSION_ACTIVITY_KEY = "crmLastBrowserActivity";
-const EXTENSION_HEARTBEAT_KEY = "crmExtensionHeartbeat";
-
 function normalizeTime(value) {
   if (!value) return "";
 
@@ -144,33 +141,41 @@ function sendWindowAlert(message) {
 function getExtensionActivity() {
   return new Promise((resolve) => {
     try {
-      if (
-        typeof window === "undefined" ||
-        !window.chrome ||
-        !window.chrome.storage ||
-        !window.chrome.storage.local
-      ) {
+      const timeout = setTimeout(() => {
+        window.removeEventListener("message", handleMessage);
+
         resolve({
           connected: false,
           lastActivity: 0,
           heartbeat: 0,
           source: "",
         });
-        return;
+      }, 700);
+
+      function handleMessage(event) {
+        if (event.source !== window) return;
+        if (event.data?.type !== "CRM_EXTENSION_ACTIVITY_RESPONSE") return;
+
+        clearTimeout(timeout);
+        window.removeEventListener("message", handleMessage);
+
+        const payload = event.data.payload || {};
+
+        resolve({
+          connected: Boolean(payload.lastActivity || payload.heartbeat),
+          lastActivity: Number(payload.lastActivity || 0),
+          heartbeat: Number(payload.heartbeat || 0),
+          source: payload.source || "",
+        });
       }
 
-      window.chrome.storage.local.get(
-        [EXTENSION_ACTIVITY_KEY, EXTENSION_HEARTBEAT_KEY, "crmActivitySource"],
-        (data) => {
-          resolve({
-            connected: Boolean(
-              data?.[EXTENSION_ACTIVITY_KEY] || data?.[EXTENSION_HEARTBEAT_KEY]
-            ),
-            lastActivity: Number(data?.[EXTENSION_ACTIVITY_KEY] || 0),
-            heartbeat: Number(data?.[EXTENSION_HEARTBEAT_KEY] || 0),
-            source: data?.crmActivitySource || "",
-          });
-        }
+      window.addEventListener("message", handleMessage);
+
+      window.postMessage(
+        {
+          type: "CRM_GET_EXTENSION_ACTIVITY",
+        },
+        "*"
       );
     } catch (error) {
       resolve({
