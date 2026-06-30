@@ -518,7 +518,7 @@ export default function DashboardPage() {
   }
     return (
     <PageShell
-      title={`Good Morning, ${agentName} 👋`}
+      title={`Wellcome Back, ${agentName} 👋`}
       subtitle="Ready to start today's outreach."
     >
       <div className="h-[calc(100vh-180px)] overflow-hidden">
