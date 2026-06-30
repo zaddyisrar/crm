@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Plus,
+  User,
   Users,
   Building2,
   X,
@@ -16,6 +17,13 @@ import {
   TimerOff,
   LogIn,
   RotateCcw,
+  CalendarDays,
+  ChevronDown,
+  Phone,
+  Mail,
+  MapPin,
+  StickyNote,
+  Star,
 } from "lucide-react";
 
 import PageShell from "@/components/crm/PageShell";
@@ -26,7 +34,6 @@ const LIVE_TICK_INTERVAL = 30 * 1000;
 
 function formatAgentName(value) {
   if (!value) return "Agent";
-
   return value
     .replace(/^LR-/i, "")
     .replace(/[-_]/g, " ")
@@ -43,28 +50,22 @@ function getTimeNow() {
 
 function getTodayKey() {
   const date = new Date();
-
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-
   return `${year}-${month}-${day}`;
 }
 
 function normalizeDate(value) {
   if (!value) return "";
-
   const raw = String(value).trim();
-
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
 
   const date = new Date(value);
-
   if (!Number.isNaN(date.getTime())) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
-
     return `${year}-${month}-${day}`;
   }
 
@@ -73,13 +74,10 @@ function normalizeDate(value) {
 
 function normalizeTime(value) {
   if (!value) return "-";
-
   const raw = String(value).trim();
-
   if (!raw || raw === "-") return "-";
 
   const date = new Date(value);
-
   if (!Number.isNaN(date.getTime())) {
     return date.toLocaleTimeString([], {
       hour: "2-digit",
@@ -92,11 +90,9 @@ function normalizeTime(value) {
 
 function parseTimeToMinutes(value) {
   const time = normalizeTime(value);
-
   if (!time || time === "-") return null;
 
   const match = time.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
-
   if (!match) return null;
 
   let hour = Number(match[1]);
@@ -117,7 +113,6 @@ function parseDateTime(dateValue, timeValue) {
   const parsed = new Date(`${date} ${time}`);
 
   if (!Number.isNaN(parsed.getTime())) return parsed;
-
   return null;
 }
 
@@ -125,7 +120,6 @@ function resolveLoginDateTime(attendance, agentShift) {
   if (!attendance) return null;
 
   const loginDateTime = parseDateTime(attendance.Date, attendance.LoginTime);
-
   if (!loginDateTime) return null;
 
   const shiftStart = parseTimeToMinutes(agentShift?.shiftStart);
@@ -144,14 +138,12 @@ function resolveLoginDateTime(attendance, agentShift) {
 
 function formatMinutes(value) {
   const minutes = Number(value || 0);
-
   if (!minutes || minutes < 0) return "0m";
 
   const hrs = Math.floor(minutes / 60);
   const mins = minutes % 60;
 
   if (!hrs) return `${mins}m`;
-
   return `${hrs}h ${mins}m`;
 }
 
@@ -165,7 +157,6 @@ function getLiveScreenMinutes(attendance, agentShift) {
   if (status === "Checked Out") return savedScreen;
 
   const loginDateTime = resolveLoginDateTime(attendance, agentShift);
-
   if (!loginDateTime) return savedScreen;
 
   const diff = Math.max(0, Date.now() - loginDateTime.getTime());
@@ -200,6 +191,18 @@ function convertSheetClient(client, index) {
     company: client.Company || "",
     status: client.Status || "Active",
   };
+}
+
+function getReadableDate() {
+  return new Date().toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function getWeekday() {
+  return new Date().toLocaleDateString("en-US", { weekday: "long" });
 }
 
 export default function DashboardPage() {
@@ -242,10 +245,7 @@ export default function DashboardPage() {
     if (!userId) return;
 
     try {
-      const response = await sheetsPost({
-        action: "getAgents",
-      });
-
+      const response = await sheetsPost({ action: "getAgents" });
       const agents = response?.data || [];
 
       const currentAgent = agents.find(
@@ -270,9 +270,7 @@ export default function DashboardPage() {
     try {
       setClientsLoading(true);
 
-      const response = await sheetsPost({
-        action: "getClients",
-      });
+      const response = await sheetsPost({ action: "getClients" });
 
       const activeClients = (response?.data || [])
         .filter((client) => String(client.Status || "Active") !== "Inactive")
@@ -518,140 +516,116 @@ export default function DashboardPage() {
     setIsClientModalOpen(false);
     setClientSearch("");
   }
+    return (
+    <PageShell
+      title={`Good Morning, ${agentName} 👋`}
+      subtitle="Ready to start today's outreach."
+    >
+      <div className="h-[calc(100vh-180px)] overflow-hidden">
+        <div className="origin-top-left scale-[0.5] w-[200%] space-y-7">
+          <div className="mt-3 flex items-center justify-between">
+  <div className="scale-110 origin-left">
+    <StatusBadge status={attendanceStatus} />
+  </div>
 
-  return (
-    <PageShell title={`Hello, Good Morning ${agentName}`} subtitle="">
-      <div className="origin-top-left scale-[0.85] w-[117.65%]">
-        <div className="-mt-4 mb-2.5 flex flex-wrap items-center justify-between gap-2">
-          <StatusBadge status={attendanceStatus} />
+  <button
+    onClick={() => refreshDashboardData(agentId)}
+    disabled={leadsLoading || attendanceLoading || clientsLoading}
+    className="flex items-center gap-2 rounded-2xl border border-cyan-300/20 bg-[#071018] px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-cyan-300/40 hover:bg-cyan-300/10 hover:text-cyan-200 disabled:opacity-60"
+  >
+    <RefreshCcw
+      size={16}
+      className={
+        leadsLoading || attendanceLoading || clientsLoading
+          ? "animate-spin"
+          : ""
+      }
+    />
+    {leadsLoading || attendanceLoading || clientsLoading
+      ? "Refreshing..."
+      : "Refresh"}
+  </button>
+</div>
+          <section className="rounded-[1.6rem] border border-cyan-300/20 bg-gradient-to-r from-cyan-300/10 via-[#071018]/85 to-[#071018]/80 p-5 shadow-[0_0_50px_rgba(34,211,238,0.08)] backdrop-blur-xl">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-4">
+                <ClientAvatar name={selectedClient?.company} />
+                
 
-          <button
-            onClick={() => refreshDashboardData(agentId)}
-            disabled={leadsLoading || attendanceLoading || clientsLoading}
-            className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] font-medium text-slate-300 hover:border-cyan-300/25 hover:text-cyan-100 disabled:opacity-60"
-          >
-            <RefreshCcw
-              size={13}
-              className={
-                leadsLoading || attendanceLoading || clientsLoading
-                  ? "animate-spin"
-                  : ""
-              }
+                <div>
+                  <p className="text-xs font-semibold text-slate-300">
+                    Current Client
+                  </p>
+                  <h2 className="mt-1 max-w-[620px] truncate text-2xl font-black text-white">
+                    {clientsLoading
+                      ? "Loading Clients..."
+                      : selectedClient?.company || "Select Client"}
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {selectedClient?.name ||
+                      "Clients are loaded live from Google Sheets."}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsClientModalOpen(true)}
+                className="flex items-center justify-center gap-2 rounded-full border border-cyan-300/35 bg-cyan-300/10 px-5 py-3 text-sm font-bold text-cyan-100 transition hover:bg-cyan-300/15 hover:shadow-[0_0_30px_rgba(34,211,238,0.16)]"
+              >
+                Change Client
+                <ChevronDown size={16} />
+              </button>
+            </div>
+          </section>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <MetricCard
+              label="Leads Today"
+              value={leadsLoading ? "..." : todayLeadCount}
+              note={`${monthlyLeadCount} this month`}
+              icon={Users}
+              color="green"
             />
-            Refresh
-          </button>
-        </div>
 
-        <div className="mb-2.5 flex flex-col gap-2 rounded-2xl border border-white/10 bg-[#071018]/80 px-3 py-2.5 backdrop-blur-xl xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-300/70">
-              Agent Workspace
-            </p>
-            <h2 className="mt-0.5 truncate text-sm font-semibold text-white">
-              {clientsLoading
-                ? "Loading Clients..."
-                : selectedClient?.company || "Select Client"}
-            </h2>
-            <p className="text-[10px] text-slate-500">
-              Clients are loaded live from Google Sheets.
-            </p>
+            <MetricCard
+              label="Screen Time"
+              value={formatMinutes(screenMinutes)}
+              note="Active today"
+              icon={Activity}
+              color="blue"
+            />
+
+            <MetricCard
+              label="Inactive Time"
+              value={formatMinutes(inactiveMinutes)}
+              note={
+                lastAutoLogout !== "-"
+                  ? `Last auto logout ${lastAutoLogout}`
+                  : "No inactivity yet"
+              }
+              icon={TimerOff}
+              color="red"
+            />
           </div>
 
-          <button
-            onClick={() => setIsClientModalOpen(true)}
-            className="flex items-center justify-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3 py-1.5 text-[11px] font-medium text-cyan-100 hover:bg-cyan-300/15"
-          >
-            <Plus size={13} />
-            Select Client
-          </button>
-        </div>
+          <section className="rounded-[1.6rem] border border-white/10 bg-[#071018]/80 p-5 shadow-[0_0_45px_rgba(34,211,238,0.06)] backdrop-blur-xl">
+            <div className="mb-5 flex items-center justify-between border-b border-white/10 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-300/15 bg-cyan-300/10 text-cyan-300">
+                  <Users size={18} />
+                </div>
 
-        <div className="grid gap-2.5 md:grid-cols-4">
-          <DashboardCard
-            label="Current Client"
-            value={selectedClient?.company || "No Client"}
-            note={selectedClient?.name || "Select from Sheets"}
-            icon={Building2}
-            tone="text-cyan-300"
-          />
-
-          <DashboardCard
-            label="Leads Today"
-            value={leadsLoading ? "..." : todayLeadCount}
-            note={`${monthlyLeadCount} this month`}
-            icon={Users}
-            tone="text-green-300"
-          />
-
-          <DashboardCard
-            label="Screen Time"
-            value={formatMinutes(screenMinutes)}
-            note={
-              checkInTime !== "-" ? `Checked in at ${checkInTime}` : "Not started"
-            }
-            icon={Activity}
-            tone="text-yellow-300"
-          />
-
-          <DashboardCard
-            label="Inactive Time"
-            value={formatMinutes(inactiveMinutes)}
-            note={
-              lastAutoLogout !== "-"
-                ? `Last auto logout ${lastAutoLogout}`
-                : "No inactivity yet"
-            }
-            icon={TimerOff}
-            tone="text-red-300"
-          />
-        </div>
-
-        <div className="mt-2.5 grid gap-2.5 md:grid-cols-3">
-          <DashboardCard
-            label="Login Time"
-            value={checkInTime}
-            note={shiftNote}
-            icon={LogIn}
-            tone="text-cyan-300"
-          />
-
-          <DashboardCard
-            label="Auto Logout Time"
-            value={lastAutoLogout}
-            note="Last inactivity logout"
-            icon={TimerOff}
-            tone="text-red-300"
-          />
-
-          <DashboardCard
-            label="Last Resume"
-            value={lastResumeTime}
-            note="After auto logout"
-            icon={RotateCcw}
-            tone="text-purple-300"
-          />
-        </div>
-
-        <div className="mt-3">
-          <section className="rounded-2xl border border-white/10 bg-[#071018]/80 px-3 py-2.5 backdrop-blur-xl">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-300/70">
-                  Manual Entry
-                </p>
-                <h2 className="text-sm font-semibold text-white">
-                  Add Lead Data
-                </h2>
+                <h2 className="text-xl font-black text-white">Add Lead</h2>
               </div>
 
               {leadError && (
-                <span className="rounded-lg border border-red-400/20 bg-red-400/10 px-3 py-1 text-[10px] text-red-300">
+                <span className="rounded-xl border border-red-400/20 bg-red-400/10 px-3 py-1.5 text-[10px] font-semibold text-red-300">
                   {leadError}
                 </span>
               )}
             </div>
 
-            <form onSubmit={handleSubmit} className="grid gap-2 md:grid-cols-3">
+            <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-3">
               <Field
                 label="Client Name"
                 name="name"
@@ -659,6 +633,7 @@ export default function DashboardPage() {
                 onChange={handleChange}
                 placeholder="John Carter"
                 required
+                icon={User}
               />
 
               <Field
@@ -668,6 +643,7 @@ export default function DashboardPage() {
                 onChange={handleChange}
                 placeholder={selectedClient?.company || "Company name"}
                 required
+                icon={Building2}
               />
 
               <Field
@@ -677,6 +653,7 @@ export default function DashboardPage() {
                 onChange={handleChange}
                 placeholder="+1 555 000 1234"
                 required
+                icon={Phone}
               />
 
               <Field
@@ -685,6 +662,7 @@ export default function DashboardPage() {
                 value={form.email}
                 onChange={handleChange}
                 placeholder="john@company.com"
+                icon={Mail}
               />
 
               <Field
@@ -693,6 +671,7 @@ export default function DashboardPage() {
                 value={form.address}
                 onChange={handleChange}
                 placeholder="Street, city, state"
+                icon={MapPin}
               />
 
               <Field
@@ -701,20 +680,66 @@ export default function DashboardPage() {
                 value={form.note}
                 onChange={handleChange}
                 placeholder="Short call note"
+                icon={StickyNote}
               />
 
               <div className="md:col-span-3">
                 <button
                   type="submit"
                   disabled={savingLead}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3 py-2 text-[11px] font-medium text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-300/25 bg-gradient-to-r from-cyan-400/70 to-cyan-300 px-4 py-3 text-sm font-black text-black shadow-[0_0_35px_rgba(34,211,238,0.22)] transition hover:scale-[1.005] hover:shadow-[0_0_50px_rgba(34,211,238,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <Plus size={13} />
+                  <Plus size={16} />
                   {savingLead ? "Saving Lead..." : "Save Lead"}
                 </button>
               </div>
             </form>
           </section>
+
+          <div className="grid gap-4 xl:grid-cols-[2fr_0.8fr]">
+            <section className="rounded-[1.6rem] border border-white/10 bg-[#071018]/80 p-5 shadow-[0_0_45px_rgba(34,211,238,0.06)] backdrop-blur-xl">
+              <h2 className="mb-5 text-lg font-black text-white">
+                Today's Schedule
+              </h2>
+
+              <div className="space-y-4">
+                <TimelineItem
+                  color="green"
+                  label="Login Time"
+                  value={checkInTime}
+                />
+
+                <TimelineItem
+                  color="blue"
+                  label="Auto Logout"
+                  value={lastAutoLogout}
+                />
+
+                <TimelineItem
+                  color="purple"
+                  label="Last Resume"
+                  value={lastResumeTime}
+                />
+              </div>
+            </section>
+
+            <section className="relative overflow-hidden rounded-[1.6rem] border border-white/10 bg-[#071018]/80 p-5 shadow-[0_0_45px_rgba(34,211,238,0.06)] backdrop-blur-xl">
+              <div className="relative z-10">
+                <div className="mb-8 flex items-center gap-3">
+                  <Star className="text-yellow-300" size={20} />
+                  <h2 className="text-lg font-black text-white">Pro Tip</h2>
+                </div>
+
+                <p className="max-w-[260px] text-base leading-relaxed text-slate-300">
+                  Consistency is what transforms average into excellence.
+                </p>
+
+                <p className="mt-8 text-5xl font-black text-cyan-300/60">“</p>
+              </div>
+
+              <div className="absolute bottom-0 left-0 h-24 w-full bg-[radial-gradient(circle_at_30%_100%,rgba(34,211,238,0.18),transparent_55%)]" />
+            </section>
+          </div>
         </div>
       </div>
 
@@ -810,37 +835,53 @@ export default function DashboardPage() {
   );
 }
 
+function ClientAvatar({ name }) {
+  const initials = String(name || "CRM")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join("")
+    .toUpperCase();
+
+  return (
+    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/15 bg-cyan-300/10 text-xl font-black text-cyan-300 shadow-[0_0_25px_rgba(34,211,238,0.12)]">
+      {initials || "CRM"}
+    </div>
+  );
+}
+
 function StatusBadge({ status }) {
   const config = {
     Active: {
       text: "Active",
       icon: BriefcaseBusiness,
-      className: "border-emerald-300/20 bg-emerald-300/10 text-emerald-300",
+      className: "border-emerald-300/25 bg-emerald-300/10 text-emerald-300",
     },
     Break: {
       text: "On Break",
       icon: Coffee,
-      className: "border-yellow-300/20 bg-yellow-300/10 text-yellow-300",
+      className: "border-yellow-300/25 bg-yellow-300/10 text-yellow-300",
     },
     Washroom: {
       text: "Washroom",
       icon: Bath,
-      className: "border-purple-300/20 bg-purple-300/10 text-purple-300",
+      className: "border-purple-300/25 bg-purple-300/10 text-purple-300",
     },
     "In Meeting": {
       text: "In Meeting",
       icon: BriefcaseBusiness,
-      className: "border-blue-300/20 bg-blue-300/10 text-blue-300",
+      className: "border-blue-300/25 bg-blue-300/10 text-blue-300",
     },
     "Auto Logged Out": {
       text: "Auto Logged Out",
       icon: TimerOff,
-      className: "border-red-300/20 bg-red-300/10 text-red-300",
+      className: "border-red-300/25 bg-red-300/10 text-red-300",
     },
     "Checked Out": {
       text: "Checked Out",
       icon: CheckCircle2,
-      className: "border-slate-300/20 bg-slate-300/10 text-slate-300",
+      className: "border-slate-300/25 bg-slate-300/10 text-slate-300",
     },
   };
 
@@ -849,44 +890,79 @@ function StatusBadge({ status }) {
 
   return (
     <div
-      className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-xs font-semibold ${item.className}`}
+      className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-xs font-bold ${item.className}`}
     >
       <Icon size={15} />
-      Current Status: {item.text}
+      {item.text}
     </div>
   );
 }
 
-function DashboardCard({ label, value, note, icon: Icon, tone }) {
+function MetricCard({ label, value, note, icon: Icon, color }) {
+  const colors = {
+    green: "text-emerald-300 bg-emerald-300/10 border-emerald-300/15",
+    blue: "text-blue-300 bg-blue-300/10 border-blue-300/15",
+    purple: "text-purple-300 bg-purple-300/10 border-purple-300/15",
+    red: "text-red-300 bg-red-300/10 border-red-300/15",
+  };
+
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#071018]/80 px-4 py-3 backdrop-blur-xl">
-      <div className="mb-2 flex items-center justify-between">
-        <div className={`rounded-xl bg-white/5 p-2 ${tone}`}>
-          <Icon size={15} />
+    <div className="group rounded-[1.4rem] border border-white/10 bg-[#071018]/80 p-6 shadow-[0_0_35px_rgba(34,211,238,0.04)] backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-cyan-300/25 hover:bg-[#09141f]/90">
+      <div className="flex items-center gap-5">
+        <div
+          className={`flex h-16 w-16 items-center justify-center rounded-3xl border ${
+            colors[color] || colors.blue
+          }`}
+        >
+          <Icon size={30} />
         </div>
 
-        <span className="max-w-[160px] truncate text-[10px] text-slate-500">
-          {note}
-        </span>
+        <div>
+          <p className="text-sm font-medium text-slate-400">{label}</p>
+          <p className="mt-2 text-3xl font-black text-white">{value}</p>
+          <p className="mt-1 text-xs text-slate-500">{note}</p>
+        </div>
       </div>
-
-      <p className="truncate text-base font-black text-white">{value}</p>
-      <p className="text-[11px] text-slate-400">{label}</p>
     </div>
   );
 }
 
-function Field({ label, ...props }) {
+function TimelineItem({ color, label, value }) {
+  const colors = {
+    green: "bg-emerald-300 shadow-[0_0_18px_rgba(110,231,183,0.5)]",
+    blue: "bg-blue-300 shadow-[0_0_18px_rgba(147,197,253,0.5)]",
+    purple: "bg-purple-300 shadow-[0_0_18px_rgba(216,180,254,0.5)]",
+    red: "bg-red-300 shadow-[0_0_18px_rgba(252,165,165,0.5)]",
+  };
+
+  return (
+    <div className="flex items-center gap-4">
+      <span className={`h-3 w-3 rounded-full ${colors[color]}`} />
+
+      <div className="rounded-2xl border border-white/10 bg-black/20 px-5 py-2">
+        <p className="text-sm font-black text-white">{value}</p>
+      </div>
+
+      <p className="text-sm text-slate-400">{label}</p>
+    </div>
+  );
+}
+
+function Field({ label, icon: Icon, ...props }) {
   return (
     <div>
-      <label className="mb-0.5 block text-[10px] text-slate-300">
+      <label className="mb-2 block text-xs font-medium text-slate-400">
         {label}
       </label>
 
-      <input
-        {...props}
-        className="w-full rounded-lg border border-white/10 bg-black/25 px-2.5 py-1.5 text-[11px] text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/35"
-      />
+      <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/25 px-3 py-3 transition focus-within:border-cyan-300/35 focus-within:bg-black/35">
+        {Icon && <Icon size={16} className="text-slate-500" />}
+
+        <input
+          {...props}
+          className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-600"
+        />
+      </div>
     </div>
   );
 }

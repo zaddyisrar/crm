@@ -148,7 +148,7 @@ export default function LoginPage() {
       />
 
       <section className="relative z-10 flex h-screen items-center justify-center overflow-hidden px-5">
-        <div className="w-full max-w-[330px] scale-[0.8] origin-center">
+        <div className="w-full max-w-[330px] scale-[0.85] origin-center">
           <form
             onSubmit={handleLogin}
             className={`relative overflow-hidden rounded-[1.7rem] border px-5 py-5 backdrop-blur-2xl transition-all duration-500 sm:px-6 sm:py-6 ${
