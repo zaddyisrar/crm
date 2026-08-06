@@ -10,12 +10,15 @@ import {
   RefreshCcw,
   TrendingDown,
   TrendingUp,
+  ChevronLeft,
+  RotateCcw,
 } from "lucide-react";
 
 function makeDateKey(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
+
   return `${year}-${month}-${day}`;
 }
 
@@ -23,11 +26,35 @@ function getCurrentMonthKey() {
   const date = new Date();
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
+
   return `${year}-${month}`;
+}
+
+function getPreviousMonthKey(monthKey) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const date = new Date(year, month - 2, 1);
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}`;
+}
+
+function formatMonthLabel(monthKey) {
+  if (!monthKey) return "Unknown Month";
+
+  const [year, month] = monthKey.split("-").map(Number);
+  const date = new Date(year, month - 1, 1);
+
+  return date.toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function normalizeDate(value) {
   if (!value) return "";
+
   const raw = String(value).trim();
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
@@ -43,6 +70,7 @@ function normalizeDate(value) {
 
 function normalizeTime(value) {
   if (!value) return "-";
+
   const raw = String(value).trim();
 
   if (!raw || raw === "-") return "-";
@@ -61,9 +89,11 @@ function normalizeTime(value) {
 
 function parseTimeToMinutes(value) {
   const raw = normalizeTime(value);
+
   if (!raw || raw === "-") return null;
 
   const match = raw.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+
   if (!match) return null;
 
   let hour = Number(match[1]);
@@ -80,7 +110,9 @@ function classifyAttendance(loginTime, entryTime = "07:00 PM") {
   const loginMinutes = parseTimeToMinutes(loginTime);
   const entryMinutes = parseTimeToMinutes(entryTime);
 
-  if (loginMinutes === null || entryMinutes === null) return "onTime";
+  if (loginMinutes === null || entryMinutes === null) {
+    return "onTime";
+  }
 
   if (loginMinutes > entryMinutes + 60) return "halfDay";
   if (loginMinutes > entryMinutes + 10) return "late";
@@ -91,18 +123,24 @@ function classifyAttendance(loginTime, entryTime = "07:00 PM") {
 function isWeekend(dateKey) {
   const date = new Date(`${dateKey}T00:00:00`);
   const day = date.getDay();
+
   return day === 0 || day === 6;
 }
 
 function getWorkingDaysInMonth(monthKey, holidays = []) {
   const [year, month] = monthKey.split("-").map(Number);
   const lastDay = new Date(year, month, 0).getDate();
-  const holidaySet = new Set(holidays.map((holiday) => normalizeDate(holiday.Date)));
+
+  const holidaySet = new Set(
+    holidays.map((holiday) => normalizeDate(holiday.Date))
+  );
 
   const days = [];
 
   for (let day = 1; day <= lastDay; day++) {
-    const dateKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const dateKey = `${year}-${String(month).padStart(2, "0")}-${String(
+      day
+    ).padStart(2, "0")}`;
 
     if (isWeekend(dateKey)) continue;
     if (holidaySet.has(dateKey)) continue;
@@ -118,6 +156,10 @@ function formatPKR(value) {
 }
 
 export default function ManagerReportsPage() {
+  const currentMonthKey = getCurrentMonthKey();
+
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthKey);
+
   const [agentRows, setAgentRows] = useState([]);
   const [attendanceRows, setAttendanceRows] = useState([]);
   const [leadRows, setLeadRows] = useState([]);
@@ -127,9 +169,34 @@ export default function ManagerReportsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const selectedMonthLabel = formatMonthLabel(selectedMonth);
+  const isCurrentMonth = selectedMonth === currentMonthKey;
+
+  function showPreviousMonth() {
+    setSelectedMonth((current) => getPreviousMonthKey(current));
+  }
+
+  function showCurrentMonth() {
+    setSelectedMonth(currentMonthKey);
+  }
+
+  function handleMonthChange(event) {
+    const nextMonth = event.target.value;
+
+    if (!nextMonth) return;
+
+    if (nextMonth > currentMonthKey) {
+      setSelectedMonth(currentMonthKey);
+      return;
+    }
+
+    setSelectedMonth(nextMonth);
+  }
+
   async function loadReports(showLoader = false) {
     try {
       if (showLoader) setLoading(true);
+
       setError("");
 
       const [
@@ -153,14 +220,20 @@ export default function ManagerReportsPage() {
       setHolidayRows(holidaysResponse?.data || []);
     } catch (err) {
       console.error("Manager reports sheet read failed:", err);
-      setError(err?.message || "Failed to load reports from Google Sheets");
+
+      setError(
+        err?.message || "Failed to load reports from Google Sheets"
+      );
+
       setAgentRows([]);
       setAttendanceRows([]);
       setLeadRows([]);
       setCommissionRows([]);
       setHolidayRows([]);
     } finally {
-      if (showLoader) setLoading(false);
+      if (showLoader) {
+        setLoading(false);
+      }
     }
   }
 
@@ -174,42 +247,44 @@ export default function ManagerReportsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const monthKey = getCurrentMonthKey();
-
   const workingDays = useMemo(() => {
-    return getWorkingDaysInMonth(monthKey, holidayRows);
-  }, [monthKey, holidayRows]);
+    return getWorkingDaysInMonth(selectedMonth, holidayRows);
+  }, [selectedMonth, holidayRows]);
 
   const payrollRows = useMemo(() => {
     const agents = agentRows.filter((user) => {
       const role = String(user.Role || "").toLowerCase();
       const status = String(user.Status || "Active").toLowerCase();
+
       return role === "agent" && status !== "inactive";
     });
 
     const monthAttendance = attendanceRows.filter((row) =>
-      normalizeDate(row.Date).startsWith(monthKey)
+      normalizeDate(row.Date).startsWith(selectedMonth)
     );
 
     const monthCommissions = commissionRows.filter((row) =>
-      normalizeDate(row.Date).startsWith(monthKey)
+      normalizeDate(row.Date).startsWith(selectedMonth)
     );
 
     return agents.map((agent) => {
       const agentId = String(agent.AgentID || "").toUpperCase();
       const salary = Number(agent.Salary || 0);
       const entryTime = agent.EntryTime || "07:00 PM";
+
       const totalDays = workingDays.length;
       const dailySalary = totalDays > 0 ? salary / totalDays : 0;
 
       const agentAttendance = monthAttendance.filter(
-        (row) => String(row.AgentID || "").toUpperCase() === agentId
+        (row) =>
+          String(row.AgentID || "").toUpperCase() === agentId
       );
 
       const attendanceByDate = {};
 
       agentAttendance.forEach((row) => {
         const date = normalizeDate(row.Date);
+
         if (!date) return;
         if (!workingDays.includes(date)) return;
         if (!attendanceByDate[date]) attendanceByDate[date] = row;
@@ -231,22 +306,41 @@ export default function ManagerReportsPage() {
 
         activeDays++;
 
-        const status = classifyAttendance(row.LoginTime, entryTime);
+        const status = classifyAttendance(
+          row.LoginTime,
+          entryTime
+        );
 
-        if (status === "halfDay") halfDays++;
-        else if (status === "late") late++;
-        else onTime++;
+        if (status === "halfDay") {
+          halfDays++;
+        } else if (status === "late") {
+          late++;
+        } else {
+          onTime++;
+        }
       });
 
       const commission = monthCommissions
-        .filter((row) => String(row.AgentID || "").toUpperCase() === agentId)
-        .reduce((sum, row) => sum + Number(row.Commission || 0), 0);
+        .filter(
+          (row) =>
+            String(row.AgentID || "").toUpperCase() === agentId
+        )
+        .reduce(
+          (sum, row) => sum + Number(row.Commission || 0),
+          0
+        );
 
       const lateDeduction = late * (dailySalary / 3);
       const halfDayDeduction = halfDays * (dailySalary / 2);
       const absentDeduction = absent * dailySalary;
-      const deduction = lateDeduction + halfDayDeduction + absentDeduction;
-      const finalSalary = salary - deduction + commission;
+
+      const deduction =
+        lateDeduction +
+        halfDayDeduction +
+        absentDeduction;
+
+      const finalSalary =
+        salary - deduction + commission;
 
       return {
         agentId: agent.AgentID || "-",
@@ -265,7 +359,13 @@ export default function ManagerReportsPage() {
         dailySalary,
       };
     });
-  }, [agentRows, attendanceRows, commissionRows, monthKey, workingDays]);
+  }, [
+    agentRows,
+    attendanceRows,
+    commissionRows,
+    selectedMonth,
+    workingDays,
+  ]);
 
   const totals = useMemo(() => {
     return payrollRows.reduce(
@@ -276,6 +376,7 @@ export default function ManagerReportsPage() {
         acc.finalPayroll += Number(row.finalSalary || 0);
         acc.activeDays += Number(row.activeDays || 0);
         acc.totalDays += Number(row.totalDays || 0);
+
         return acc;
       },
       {
@@ -290,7 +391,11 @@ export default function ManagerReportsPage() {
   }, [payrollRows]);
 
   const attendanceRate =
-    totals.totalDays > 0 ? Math.round((totals.activeDays / totals.totalDays) * 100) : 0;
+    totals.totalDays > 0
+      ? Math.round(
+          (totals.activeDays / totals.totalDays) * 100
+        )
+      : 0;
 
   return (
     <ManagerShell>
@@ -300,13 +405,54 @@ export default function ManagerReportsPage() {
         </div>
       )}
 
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={showPreviousMonth}
+            className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-xs font-bold text-slate-300 transition hover:border-cyan-300/30 hover:text-white"
+          >
+            <ChevronLeft size={15} />
+            Previous Month
+          </button>
+
+          <div className="min-w-[180px] rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-center">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-300/70">
+              Viewing
+            </p>
+
+            <p className="mt-0.5 text-sm font-black text-white">
+              {selectedMonthLabel}
+            </p>
+          </div>
+
+          <input
+            type="month"
+            value={selectedMonth}
+            max={currentMonthKey}
+            onChange={handleMonthChange}
+            className="rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/35"
+          />
+
+          <button
+            onClick={showCurrentMonth}
+            disabled={isCurrentMonth}
+            className="flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-bold text-cyan-200 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <RotateCcw size={14} />
+            Current Month
+          </button>
+        </div>
+
         <button
           onClick={() => loadReports(true)}
           disabled={loading}
           className="flex items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm font-bold text-cyan-200 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <RefreshCcw size={15} className={loading ? "animate-spin" : ""} />
+          <RefreshCcw
+            size={15}
+            className={loading ? "animate-spin" : ""}
+          />
+
           Refresh
         </button>
       </div>
@@ -314,7 +460,11 @@ export default function ManagerReportsPage() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <ReportCard
           title="Final Payroll"
-          value={loading ? "..." : formatPKR(totals.finalPayroll)}
+          value={
+            loading
+              ? "..."
+              : formatPKR(totals.finalPayroll)
+          }
           subtitle="Salary - cuts + commission"
           icon={Banknote}
           tone="cyan"
@@ -322,7 +472,11 @@ export default function ManagerReportsPage() {
 
         <ReportCard
           title="Total Commission"
-          value={loading ? "..." : formatPKR(totals.totalCommission)}
+          value={
+            loading
+              ? "..."
+              : formatPKR(totals.totalCommission)
+          }
           subtitle="Approved lead commission"
           icon={TrendingUp}
           tone="emerald"
@@ -330,7 +484,11 @@ export default function ManagerReportsPage() {
 
         <ReportCard
           title="Total Deductions"
-          value={loading ? "..." : formatPKR(totals.totalDeduction)}
+          value={
+            loading
+              ? "..."
+              : formatPKR(totals.totalDeduction)
+          }
           subtitle="Late + half day + absent"
           icon={TrendingDown}
           tone="red"
@@ -338,7 +496,11 @@ export default function ManagerReportsPage() {
 
         <ReportCard
           title="Attendance Rate"
-          value={loading ? "..." : `${attendanceRate}%`}
+          value={
+            loading
+              ? "..."
+              : `${attendanceRate}%`
+          }
           subtitle="Active days / total days"
           icon={CalendarCheck}
           tone="yellow"
@@ -346,8 +508,10 @@ export default function ManagerReportsPage() {
 
         <ReportCard
           title="Working Days"
-          value={loading ? "..." : workingDays.length}
-          subtitle={`${monthKey} minus weekends/holidays`}
+          value={
+            loading ? "..." : workingDays.length
+          }
+          subtitle={`${selectedMonthLabel} minus weekends/holidays`}
           icon={FileBarChart}
           tone="purple"
         />
@@ -365,12 +529,13 @@ export default function ManagerReportsPage() {
             </h2>
 
             <p className="mt-1 text-xs text-slate-500">
-              Uses EntryTime, holidays, commission, late, half day and absent deductions.
+              Uses EntryTime, holidays, commission, late,
+              half day and absent deductions.
             </p>
           </div>
 
           <div className="w-fit rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-bold text-cyan-300">
-            {monthKey} · {workingDays.length} Working Days
+            {selectedMonthLabel} · {workingDays.length} Working Days
           </div>
         </div>
 
@@ -394,39 +559,81 @@ export default function ManagerReportsPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="10" className="px-4 py-7 text-center text-slate-500">
+                  <td
+                    colSpan="10"
+                    className="px-4 py-7 text-center text-slate-500"
+                  >
                     Loading salary reports...
                   </td>
                 </tr>
               ) : payrollRows.length === 0 ? (
                 <tr>
-                  <td colSpan="10" className="px-4 py-7 text-center text-slate-500">
-                    No payroll reports found.
+                  <td
+                    colSpan="10"
+                    className="px-4 py-7 text-center text-slate-500"
+                  >
+                    No payroll reports found for{" "}
+                    {selectedMonthLabel}.
                   </td>
                 </tr>
               ) : (
                 payrollRows.map((agent) => (
-                  <tr key={agent.agentId} className="border-t border-white/10 text-slate-300">
+                  <tr
+                    key={agent.agentId}
+                    className="border-t border-white/10 text-slate-300"
+                  >
                     <td className="px-4 py-3">
-                      <p className="font-bold text-white">{agent.agentName}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">
-                        {agent.agentId} · Entry {agent.entryTime}
+                      <p className="font-bold text-white">
+                        {agent.agentName}
                       </p>
+
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {agent.agentId} · Entry{" "}
+                        {agent.entryTime}
+                      </p>
+
                       <p className="mt-0.5 text-xs text-slate-600">
-                        Base {formatPKR(agent.baseSalary)} · 1 day {formatPKR(agent.dailySalary)}
+                        Base {formatPKR(agent.baseSalary)} · 1 day{" "}
+                        {formatPKR(agent.dailySalary)}
                       </p>
                     </td>
 
-                    <td className="px-4 py-3 font-bold text-white">{agent.totalDays}</td>
-                    <td className="px-4 py-3 text-emerald-300">{agent.activeDays}</td>
-                    <td className="px-4 py-3 text-yellow-300">{agent.late}</td>
-                    <td className="px-4 py-3 text-emerald-300">{agent.onTime}</td>
-                    <td className="px-4 py-3 text-orange-300">{agent.halfDays}</td>
-                    <td className="px-4 py-3 text-red-300">{agent.absent}</td>
-                    <td className="px-4 py-3 text-cyan-300">{formatPKR(agent.commission)}</td>
-                    <td className="px-4 py-3 text-red-300">{formatPKR(agent.deduction)}</td>
+                    <td className="px-4 py-3 font-bold text-white">
+                      {agent.totalDays}
+                    </td>
+
+                    <td className="px-4 py-3 text-emerald-300">
+                      {agent.activeDays}
+                    </td>
+
+                    <td className="px-4 py-3 text-yellow-300">
+                      {agent.late}
+                    </td>
+
+                    <td className="px-4 py-3 text-emerald-300">
+                      {agent.onTime}
+                    </td>
+
+                    <td className="px-4 py-3 text-orange-300">
+                      {agent.halfDays}
+                    </td>
+
+                    <td className="px-4 py-3 text-red-300">
+                      {agent.absent}
+                    </td>
+
+                    <td className="px-4 py-3 text-cyan-300">
+                      {formatPKR(agent.commission)}
+                    </td>
+
+                    <td className="px-4 py-3 text-red-300">
+                      {formatPKR(agent.deduction)}
+                    </td>
+
                     <td className="px-4 py-3">
-                      <p className="font-black text-white">{formatPKR(agent.finalSalary)}</p>
+                      <p className="font-black text-white">
+                        {formatPKR(agent.finalSalary)}
+                      </p>
                     </td>
                   </tr>
                 ))
@@ -439,13 +646,24 @@ export default function ManagerReportsPage() {
   );
 }
 
-function ReportCard({ title, value, subtitle, icon: Icon, tone }) {
+function ReportCard({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  tone,
+}) {
   const tones = {
-    emerald: "border-emerald-300/20 bg-emerald-300/10 text-emerald-300",
-    cyan: "border-cyan-300/20 bg-cyan-300/10 text-cyan-300",
-    yellow: "border-yellow-300/20 bg-yellow-300/10 text-yellow-300",
-    purple: "border-purple-300/20 bg-purple-300/10 text-purple-300",
-    red: "border-red-300/20 bg-red-300/10 text-red-300",
+    emerald:
+      "border-emerald-300/20 bg-emerald-300/10 text-emerald-300",
+    cyan:
+      "border-cyan-300/20 bg-cyan-300/10 text-cyan-300",
+    yellow:
+      "border-yellow-300/20 bg-yellow-300/10 text-yellow-300",
+    purple:
+      "border-purple-300/20 bg-purple-300/10 text-purple-300",
+    red:
+      "border-red-300/20 bg-red-300/10 text-red-300",
   };
 
   return (
@@ -460,8 +678,13 @@ function ReportCard({ title, value, subtitle, icon: Icon, tone }) {
         </div>
       </div>
 
-      <h3 className="text-2xl font-black leading-none text-white">{value}</h3>
-      <p className="mt-2 text-xs text-slate-500">{subtitle}</p>
+      <h3 className="text-2xl font-black leading-none text-white">
+        {value}
+      </h3>
+
+      <p className="mt-2 text-xs text-slate-500">
+        {subtitle}
+      </p>
     </div>
   );
 }
